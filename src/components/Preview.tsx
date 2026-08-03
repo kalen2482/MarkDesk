@@ -39,6 +39,7 @@ export const Preview: React.FC<PreviewProps> = ({
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isDark, setIsDark] = useState(false)
   const selectedImageRef = useRef<HTMLImageElement | null>(null)
+  const syncingScrollRef = useRef(false)
 
   // ── Mermaid init ──
   useEffect(() => {
@@ -127,14 +128,16 @@ export const Preview: React.FC<PreviewProps> = ({
   useEffect(() => {
     if (settings.syncScroll && containerRef.current) {
       const maxScroll = containerRef.current.scrollHeight - containerRef.current.clientHeight
+      syncingScrollRef.current = true
       containerRef.current.scrollTop = maxScroll * scrollSync
+      requestAnimationFrame(() => { syncingScrollRef.current = false })
     }
   }, [scrollSync, settings.syncScroll])
 
   const handleScroll = () => {
     const el = containerRef.current
     if (!el) return
-    if (!settings.syncScroll) return
+    if (!settings.syncScroll || syncingScrollRef.current) return
     const maxScroll = el.scrollHeight - el.clientHeight
     if (maxScroll > 0) {
       onScroll(el.scrollTop / maxScroll)

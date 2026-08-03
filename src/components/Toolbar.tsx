@@ -51,6 +51,7 @@ const Tooltip: React.FC<TooltipProps> = ({ label, shortcut, syntax, children }) 
   const child = React.Children.only(children) as React.ReactElement<any>
   const cloned = React.cloneElement(child, {
     'aria-label': label,
+    title: [label, shortcut, syntax ? `Markdown: ${syntax}` : undefined].filter(Boolean).join(' · '),
   })
   return (
     <div className="relative group/tb">
@@ -145,8 +146,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <button
           className="flex items-center gap-1 h-8 px-2 rounded-notion hover:bg-warm-white dark:hover:bg-dark-surface transition-colors text-sm text-near-black dark:text-dark-text"
           onMouseDown={preventBlur}
-          onClick={() => setHeadingDropdown(!headingDropdown)}
-          aria-label={`当前样式: ${headingLabels[currentHeadingLevel]}`}
+          onClick={() => { onAction('heading', '0'); setHeadingDropdown(false) }}
+          aria-label="正文（普通段落）"
+          title="正文（普通段落） · Ctrl+0"
           aria-haspopup="listbox"
           aria-expanded={headingDropdown}
         >

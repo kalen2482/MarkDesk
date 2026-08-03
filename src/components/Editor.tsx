@@ -30,12 +30,15 @@ export const Editor: React.FC<EditorProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const lineNumbersRef = useRef<HTMLDivElement>(null)
+  const syncingScrollRef = useRef(false)
 
   // Apply external scroll sync
   useEffect(() => {
     if (settings.syncScroll && textareaRef.current && containerRef.current) {
       const maxScroll = textareaRef.current.scrollHeight - textareaRef.current.clientHeight
+      syncingScrollRef.current = true
       textareaRef.current.scrollTop = maxScroll * scrollSync
+      requestAnimationFrame(() => { syncingScrollRef.current = false })
     }
   }, [scrollSync, settings.syncScroll])
 
@@ -62,7 +65,7 @@ export const Editor: React.FC<EditorProps> = ({
     const ta = textareaRef.current
     if (!ta) return
     const maxScroll = ta.scrollHeight - ta.clientHeight
-    if (maxScroll > 0 && settings.syncScroll) {
+    if (maxScroll > 0 && settings.syncScroll && !syncingScrollRef.current) {
       onScroll(ta.scrollTop / maxScroll)
     }
     if (lineNumbersRef.current) {

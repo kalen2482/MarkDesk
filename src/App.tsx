@@ -420,6 +420,33 @@ export default function App() {
       return
     }
 
+    // Fallback for browser builds or a missing preload bridge: insert an embedded image.
+    if (action === 'image' && !window.electronAPI?.openImageDialog) {
+      const picker = document.createElement('input')
+      picker.type = 'file'
+      picker.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/bmp'
+      picker.onchange = () => {
+        const file = picker.files?.[0]
+        if (!file) return
+        const reader = new FileReader()
+        reader.onload = () => {
+          const ta = textareaRef.current
+          const alt = ta ? ta.value.slice(ta.selectionStart, ta.selectionEnd) || '图片描述' : '图片描述'
+          const insertion = `![${alt}](${String(reader.result)})`
+          if (ta) {
+            const start = ta.selectionStart
+            handleContentChange(ta.value.slice(0, start) + insertion + ta.value.slice(ta.selectionEnd))
+            requestAnimationFrame(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = start + insertion.length })
+          } else {
+            handleContentChange(`${content.trimEnd()}\n\n${insertion}\n`)
+          }
+        }
+        reader.readAsDataURL(file)
+      }
+      picker.click()
+      return
+    }
+
     // ── Rich text mode: if preview is focused (visual/split mode), use execCommand ──
     if (isPreviewFocused()) {
       const handled = dispatchRtAction(action, value)

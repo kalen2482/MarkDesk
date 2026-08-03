@@ -71,11 +71,11 @@ export const AboutModal: React.FC<AboutModalProps> = ({ visible, onClose, versio
             <div className="flex items-center gap-2">
               <span className="w-16 text-warm-gray-400 flex-shrink-0">邮箱</span>
               <a
-                href="mailto:"
+                href="mailto:heqin_2482@hotmail.com"
                 className="text-notion-blue dark:text-blue-400 hover:underline font-medium"
                 aria-label="发送邮件给作者"
               >
-                Not published
+                heqin_2482@hotmail.com
               </a>
             </div>
           </div>
