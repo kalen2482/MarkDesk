@@ -126,7 +126,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const headingLabels = ['正文', '标题 1', '标题 2', '标题 3', '标题 4', '标题 5', '标题 6']
 
   return (
-    <div className="flex items-center h-11 px-2 bg-white dark:bg-dark-bg border-b border-whisper-border dark:border-dark-border flex-shrink-0 gap-0.5 overflow-x-auto overflow-y-hidden whitespace-nowrap" role="toolbar" aria-label="格式化工具栏">
+    <div className="flex items-center min-h-11 px-2 bg-white dark:bg-dark-bg border-b border-whisper-border dark:border-dark-border flex-shrink-0 gap-0.5 overflow-visible whitespace-nowrap" role="toolbar" aria-label="格式化工具栏">
       {/* Undo/Redo */}
       <Tooltip label="撤销" shortcut="Ctrl+Z">
         <button className="tb-btn" onMouseDown={preventBlur} onClick={onUndo} disabled={!canUndo} aria-label="撤销">
@@ -143,19 +143,29 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       {/* Heading dropdown */}
       <div ref={headingRef} className="relative">
+        <div className="flex items-center h-8 rounded-notion hover:bg-warm-white dark:hover:bg-dark-surface transition-colors text-sm text-near-black dark:text-dark-text">
         <button
-          className="flex items-center gap-1 h-8 px-2 rounded-notion hover:bg-warm-white dark:hover:bg-dark-surface transition-colors text-sm text-near-black dark:text-dark-text"
+          className="flex items-center gap-1 h-8 px-2"
           onMouseDown={preventBlur}
           onClick={() => { onAction('heading', '0'); setHeadingDropdown(false) }}
           aria-label="正文（普通段落）"
           title="正文（普通段落） · Ctrl+0"
-          aria-haspopup="listbox"
-          aria-expanded={headingDropdown}
         >
           <HeadingIcon size={16} />
           <span className="text-sm">{headingLabels[currentHeadingLevel]}</span>
+        </button>
+        <button
+          className="flex items-center h-8 pr-2"
+          onMouseDown={preventBlur}
+          onClick={() => setHeadingDropdown(!headingDropdown)}
+          aria-label="选择标题级别"
+          title="选择标题级别"
+          aria-haspopup="listbox"
+          aria-expanded={headingDropdown}
+        >
           <ChevronDownIcon size={12} />
         </button>
+        </div>
         {headingDropdown && (
           <div className="absolute top-full left-0 mt-1 bg-white dark:bg-dark-surface border border-whisper-border dark:border-dark-border rounded-notion shadow-dropdown py-1 z-50 min-w-[140px]" role="listbox" aria-label="标题级别">
             {headingLabels.map((label, level) => (
