@@ -5,7 +5,7 @@
 <h1 align="center">MarkDesk</h1>
 
 <p align="center">
-  <strong>A calm, capable Markdown desk for Windows.</strong><br />
+  <strong>A calm, capable Markdown desk for your desktop.</strong><br />
   Write in Markdown · shape the rendered document directly · keep every file local.
 </p>
 
@@ -30,9 +30,9 @@
 
 Markdown is wonderfully portable, but source-only editors can interrupt the flow of writing. MarkDesk gives you both worlds in one focused desktop app: clean source text when you want precision, and a visual document when you want to think on the page.
 
-| ✍️ Write your way | 🔒 Keep it yours | 🪟 Feel at home on Windows |
+| ✍️ Write your way | 🔒 Keep it yours | 🪟 Feel at home on desktop |
 | --- | --- | --- |
-| Switch between source, split, and visual editing whenever the task changes. | No account, cloud sync, or server-side document processing. | Native file picker, standard window controls, themes, focus mode, and Markdown file associations. |
+| Switch between source, split, and visual editing whenever the task changes. | No account, cloud sync, or server-side document processing. | Native file picker, themes, focus mode, and Markdown file associations. |
 
 ## 🚀 Features
 

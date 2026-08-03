@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react'
-import type { Settings, DisplayMode } from '../types'
+import type { AppLanguage, Settings, DisplayMode } from '../types'
+import { useI18n } from '../i18n'
 
 interface SettingsPanelProps {
   visible: boolean
   settings: Settings
   onChange: (settings: Settings) => void
   onClose: () => void
+  language: AppLanguage
+  onLanguageChange: (language: AppLanguage) => void
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ visible, settings, onChange, onClose }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ visible, settings, onChange, onClose, language, onLanguageChange }) => {
+  const { t } = useI18n()
   const [local, setLocal] = useState(settings)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const closeBtnRef = useRef<HTMLButtonElement>(null)
@@ -118,6 +122,29 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ visible, settings,
                   </button>
                 ))}
               </div>
+            </div>
+          </Section>
+
+          <Section title={t('settings')}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-near-black dark:text-dark-text">{t('language')}</div>
+                <div className="text-xs text-warm-gray-300 mt-0.5">{t('languageHint')}</div>
+              </div>
+              <select
+                value={language}
+                onChange={(e) => onLanguageChange(e.target.value as AppLanguage)}
+                className="rounded-notion border border-whisper-border bg-white px-2 py-1.5 text-sm text-near-black outline-none focus:border-notion-blue dark:border-dark-border dark:bg-dark-bg dark:text-dark-text"
+                aria-label={t('language')}
+              >
+                <option value="zh-CN">简体中文</option>
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+                <option value="fr">Français</option>
+                <option value="de">Deutsch</option>
+                <option value="es">Español</option>
+              </select>
             </div>
           </Section>
 

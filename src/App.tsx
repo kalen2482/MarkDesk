@@ -11,6 +11,7 @@ import { ContextMenu } from './components/ContextMenu'
 import { ShortcutHelp } from './components/ShortcutHelp'
 import { AboutModal } from './components/AboutModal'
 import pkg from '../package.json'
+import { I18nProvider, localizeApplicationUi } from './i18n'
 
 // ── Electron IPC type (only present when running inside the desktop app) ──
 declare global {
@@ -305,6 +306,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('markdesk-language', language)
     document.documentElement.lang = language
+    const timer = window.setTimeout(() => localizeApplicationUi(language), 0)
+    const observer = new MutationObserver(() => localizeApplicationUi(language))
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => { window.clearTimeout(timer); observer.disconnect() }
   }, [language])
 
   // ── Content change handler (from textarea editor) ──
@@ -1199,16 +1204,14 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
   }
 
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-dark-bg">
+    <I18nProvider language={language}><div className="flex flex-col h-screen bg-white dark:bg-dark-bg">
       {/* Title Bar */}
       <TitleBar
         fileName={activeTab.name}
         isDirty={activeTab.isDirty}
         theme={theme}
-        language={language}
         onToggleSidebar={() => setSidebarVisible(!sidebarVisible)}
         onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-        onLanguageChange={setLanguage}
         onNewFile={handleNewFile}
         onOpenFile={handleOpenFile}
         onSave={handleSave}
@@ -1350,6 +1353,8 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         settings={settings}
         onChange={setSettings}
         onClose={() => setSettingsVisible(false)}
+        language={language}
+        onLanguageChange={setLanguage}
       />
       <ShortcutHelp
         visible={shortcutHelpVisible}
@@ -1367,6 +1372,6 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         items={contextMenuItems}
         onClose={() => setContextMenu({ visible: false, x: 0, y: 0 })}
       />
-    </div>
+    </div></I18nProvider>
   )
 }
