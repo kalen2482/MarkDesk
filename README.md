@@ -67,6 +67,17 @@ npm run build
 npm run dist:win
 ```
 
+### Build on macOS or Linux
+
+MarkDesk uses Electron and can be built on macOS and Linux from the same source tree. Install Node.js 18+, then run:
+
+```bash
+npm install
+npm run build
+```
+
+To produce distributables, run `electron-builder` on the target operating system (macOS for `.dmg`, Linux for AppImage/deb/rpm). Cross-platform signing and notarization require the appropriate platform credentials.
+
 ## 🛠️ Built with
 
 | Purpose | Technology |
@@ -87,6 +98,10 @@ MarkDesk does not upload document content to a cloud service. Documents are read
 ## 🤝 Contributing
 
 Ideas, bug reports, and pull requests are welcome. For code changes, please explain the problem being solved and run `npm run build` before opening a pull request.
+
+## 🤖 AI-assisted development
+
+MarkDesk is developed with AI-assisted engineering workflows. Human maintainers define the product direction, review changes, test builds, and make the final release decisions.
 
 ## 📄 License
 

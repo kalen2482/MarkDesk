@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { MenuIcon, SunIcon, MoonIcon, PanelLeftIcon, FocusIcon } from './Icons'
-import type { ThemeMode } from '../types'
+import type { AppLanguage, ThemeMode } from '../types'
 
 interface TitleBarProps {
   fileName: string
   isDirty: boolean
   theme: ThemeMode
+  language: AppLanguage
   onToggleSidebar: () => void
   onToggleTheme: () => void
+  onLanguageChange: (language: AppLanguage) => void
   onNewFile: () => void
   onOpenFile: () => void
   onSave: () => void
@@ -29,8 +31,10 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   fileName,
   isDirty,
   theme,
+  language,
   onToggleSidebar,
   onToggleTheme,
+  onLanguageChange,
   onNewFile,
   onOpenFile,
   onSave,
@@ -42,6 +46,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 }) => {
   const [menuOpen, setMenuOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [languageOpen, setLanguageOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const exportRef = useRef<HTMLDivElement>(null)
 
@@ -50,6 +55,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false)
         setExportOpen(false)
+        setLanguageOpen(false)
       }
     }
     document.addEventListener('mousedown', handler)
@@ -169,6 +175,16 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
       {/* Right: window and theme controls */}
       <div className="flex items-center gap-1">
+        <div className="relative">
+          <button aria-label="Language / 语言" aria-haspopup="true" aria-expanded={languageOpen} className="flex items-center justify-center min-w-8 h-8 px-1 rounded-notion hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-xs font-medium text-near-black dark:text-dark-text" onClick={() => setLanguageOpen(!languageOpen)} title="Language / 语言">A文</button>
+          {languageOpen && (
+            <div role="menu" className="absolute right-0 top-full mt-1 z-50 min-w-[150px] overflow-hidden rounded-notion border border-whisper-border bg-white py-1 shadow-dropdown dark:border-dark-border dark:bg-dark-surface">
+              {([['zh-CN', '简体中文'], ['en', 'English'], ['ja', '日本語'], ['ko', '한국어'], ['fr', 'Français'], ['de', 'Deutsch'], ['es', 'Español']] as [AppLanguage, string][]).map(([code, label]) => (
+                <button key={code} role="menuitem" onClick={() => { onLanguageChange(code); setLanguageOpen(false) }} className={`flex w-full px-3 py-1.5 text-left text-sm hover:bg-warm-white dark:hover:bg-white/5 ${language === code ? 'text-notion-blue font-medium' : 'text-near-black dark:text-dark-text'}`}>{label}</button>
+              ))}
+            </div>
+          )}
+        </div>
         <button
           aria-label="专注模式"
           className="flex items-center justify-center w-8 h-8 rounded-notion hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-near-black dark:text-dark-text"

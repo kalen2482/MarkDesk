@@ -67,6 +67,17 @@ npm run build
 npm run dist:win
 ```
 
+### 在 macOS 或 Linux 上构建
+
+MarkDesk 基于 Electron，同一份源代码也可在 macOS 和 Linux 上构建。安装 Node.js 18+ 后运行：
+
+```bash
+npm install
+npm run build
+```
+
+如需生成发行包，请在对应目标系统执行 `electron-builder`：macOS 可生成 `.dmg`，Linux 可生成 AppImage、deb 或 rpm。跨平台签名和 macOS 公证仍需要对应系统的证书与凭据。
+
 ## 🛠️ 开发框架
 
 | 模块 | 技术方案 |
@@ -87,6 +98,10 @@ MarkDesk 不会将文档内容上传到云端，文档只在本地读取和写�
 ## 🤝 参与贡献
 
 欢迎提交 Issue、功能建议和 Pull Request。提交代码前，请说明要解决的问题，并运行 `npm run build` 确保项目可以正常构建。
+
+## 🤖 AI 辅助开发声明
+
+MarkDesk 的源代码采用 AI 辅助工程工作流完成。产品方向、代码审查、构建测试及最终发布决定均由人工维护者负责。
 
 ## 📄 开源许可
 

@@ -2,6 +2,8 @@ export type DisplayMode = 'edit' | 'preview' | 'split' | 'visual'
 
 export type ThemeMode = 'light' | 'dark'
 
+export type AppLanguage = 'zh-CN' | 'en' | 'ja' | 'ko' | 'fr' | 'de' | 'es'
+
 export type SidebarTab = 'outline' | 'files'
 
 export interface HeadingNode {

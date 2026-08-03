@@ -53,7 +53,7 @@ import {
   applyBgColor,
 } from './utils/editorActions'
 import { dispatchRtAction, isPreviewFocused } from './utils/richTextActions'
-import type { DisplayMode, ThemeMode, HeadingNode, SidebarTab, Settings, FileTab, RecentFile } from './types'
+import type { AppLanguage, DisplayMode, ThemeMode, HeadingNode, SidebarTab, Settings, FileTab, RecentFile } from './types'
 
 const DEFAULT_SETTINGS: Settings = {
   fontSize: 14,
@@ -158,6 +158,10 @@ export default function App() {
   // ── UI state ──
   const [theme, setTheme] = useState<ThemeMode>(() => {
     return (localStorage.getItem('markdesk-theme') as ThemeMode) || 'light'
+  })
+  const [language, setLanguage] = useState<AppLanguage>(() => {
+    const saved = localStorage.getItem('markdesk-language') as AppLanguage | null
+    return saved && ['zh-CN', 'en', 'ja', 'ko', 'fr', 'de', 'es'].includes(saved) ? saved : 'zh-CN'
   })
   const [displayMode, setDisplayMode] = useState<DisplayMode>(() => {
     try {
@@ -297,6 +301,11 @@ export default function App() {
     }
     localStorage.setItem('markdesk-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    localStorage.setItem('markdesk-language', language)
+    document.documentElement.lang = language
+  }, [language])
 
   // ── Content change handler (from textarea editor) ──
   const handleContentChange = useCallback((newContent: string) => {
@@ -1196,8 +1205,10 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         fileName={activeTab.name}
         isDirty={activeTab.isDirty}
         theme={theme}
+        language={language}
         onToggleSidebar={() => setSidebarVisible(!sidebarVisible)}
         onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+        onLanguageChange={setLanguage}
         onNewFile={handleNewFile}
         onOpenFile={handleOpenFile}
         onSave={handleSave}
