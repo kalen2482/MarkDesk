@@ -1,54 +1,93 @@
-# MarkDesk
+<p align="center">
+  <img src="public/markdesk-icon.svg" width="104" alt="MarkDesk 图标" />
+</p>
 
-[English](README.md)
+<h1 align="center">MarkDesk</h1>
 
-MarkDesk 是一款面向 Windows 的轻量级、本地优先 Markdown 编辑器。它将 Markdown 源码编辑与可视化富文本编辑结合在同一个桌面应用中，既能保留 Markdown 的可移植性，也能获得接近文档编辑器的创作体验。
+<p align="center">
+  <strong>为 Windows 打造的轻量、本地优先 Markdown 创作桌面。</strong><br />
+  写 Markdown · 直接编辑渲染文档 · 文件始终留在本机。
+</p>
 
-## 软件优势
+<p align="center">
+  <a href="README.md">English</a> ·
+  <a href="#-快速开始">快速开始</a> ·
+  <a href="#-为什么选择-markdesk">为什么选择 MarkDesk？</a> ·
+  <a href="#-参与贡献">参与贡献</a>
+</p>
 
-- **双向编辑**：可编辑 Markdown 源码，也可在渲染后的可视化文档中编辑，两种内容双向同步。
-- **三种工作视图**：源码、分栏、可视化模式分别适合专注写作、校对和阅读展示。
-- **本地优先与隐私保护**：文档和编辑器设置保存于本机；无需注册账号，不上传文档内容到云端。
-- **轻量快速**：基于 Electron 桌面运行时与 Vite 构建的 React 界面，专注于 Markdown 创作。
-- **丰富 Markdown 支持**：支持 CommonMark、GFM 表格/任务列表/删除线/围栏代码块，并支持 KaTeX 公式、Mermaid 图表、Callout、脚注、高亮、下划线和 `[TOC]` 自动目录。
-- **高效导航**：根据标题自动生成大纲，点击可精确跳转到预览文档的对应章节。
-- **舒适编辑体验**：语法高亮、查找替换、深色模式、快捷键、字数统计、自动保存与滚动同步。
-- **Windows 集成**：提供 NSIS 安装包、自定义图标、桌面与开始菜单快捷方式，并关联 `.md`、`.markdown` 和 `.mdx` 文件。
+<p align="center">
+  <img src="https://img.shields.io/badge/平台-Windows-4f7df3?style=flat-square" alt="Windows" />
+  <img src="https://img.shields.io/badge/协议-Apache--2.0-6f42c1?style=flat-square" alt="Apache 2.0" />
+  <img src="https://img.shields.io/badge/隐私-本地优先-12a594?style=flat-square" alt="本地优先" />
+</p>
 
-## 开发框架
+<p align="center">
+  <img src="docs/images/markdesk-preview.png" alt="MarkDesk 可视化编辑界面" width="100%" />
+</p>
 
-| 模块 | 技术方案 |
-| --- | --- |
-| 桌面运行时 | Electron 31 |
-| 用户界面 | React 18 + TypeScript |
-| 构建工具 | Vite 5 |
-| 样式 | Tailwind CSS 3 |
-| Markdown 解析 | marked、marked-highlight、marked-gfm-heading-id |
-| 代码高亮 | highlight.js |
-| 数学与图表 | KaTeX、Mermaid |
-| 安全过滤 | DOMPurify |
-| Windows 打包 | electron-builder（NSIS） |
+## ✨ 为什么选择 MarkDesk？
 
-## 本地开发
+Markdown 足够开放、便携，但只面对源码的编辑方式有时会打断创作思路。MarkDesk 将两种体验放进一个专注的桌面应用：需要精确控制时写源码，需要在页面上思考时直接编辑可视化文档。
 
-需要 Node.js 18+ 与 npm。
+| ✍️ 按自己的方式写作 | 🔒 文件只属于你 | 🪟 更像 Windows 软件 |
+| --- | --- | --- |
+| 源码、分栏、可视化三种模式，随任务自由切换。 | 无需账号、无云同步、不在服务端处理文档。 | 系统图片选择器、标准窗口按键、主题、专注模式与 Markdown 文件关联。 |
+
+## 🚀 核心特性
+
+- **↔️ 双向编辑**：既可编辑 Markdown 源码，也可直接编辑渲染后的文档，两种内容保持同步。
+- **🧭 长文档导航**：根据标题实时生成目录，点击即可精确定位到对应章节。
+- **🧩 丰富而克制的 Markdown 支持**：CommonMark、GFM 表格与任务列表、代码高亮、KaTeX、Mermaid、提示块、脚注、高亮、下划线和 `[TOC]`。
+- **🖼️ 本地图片工作流**：通过系统文件选择器插入图片，并可直接显示 Markdown 中的相对路径图片。
+- **🌗 舒适的写作环境**：深浅主题、专注模式、快捷键、查找替换、字数统计与滚动同步。
+- **📁 自然地打开文件**：安装后可关联 `.md`、`.markdown`、`.mdx` 文件类型。
+
+## ⚡ 快速开始
+
+### 安装 Windows 应用
+
+从项目 Releases 下载并运行最新的 Windows 安装包。安装完成后，可以在文件资源管理器中直接用 MarkDesk 打开 Markdown 文件。
+
+### 从源码运行
+
+> 需要 Node.js 18 或更高版本。
 
 ```bash
+git clone https://github.com/kalen2482/MarkDesk.git
+cd MarkDesk
 npm install
 npm run dev
-npm run build
 ```
 
-生成 Windows 安装包：
+### 构建 Windows 安装包
 
 ```bash
+npm run build
 npm run dist:win
 ```
 
-## 隐私说明
+## 🛠️ 开发框架
 
-MarkDesk 面向本地文档创作，不提供云端同步、强制登录或服务端文档处理。文档中的外部图片或链接在打开时仍可能被访问；如需完全离线，请避免使用外部 URL。
+| 模块 | 技术方案 |
+| --- | --- |
+| 桌面运行时 | Electron |
+| 用户界面 | React + TypeScript |
+| 构建工具 | Vite |
+| 样式系统 | Tailwind CSS |
+| Markdown 渲染 | marked + highlight.js |
+| 公式与图表 | KaTeX + Mermaid |
+| HTML 安全过滤 | DOMPurify |
+| Windows 打包 | electron-builder + NSIS |
 
-## 许可证
+## 🔐 隐私说明
 
-本项目采用 [Apache License 2.0](LICENSE) 开源。
+MarkDesk 不会将文档内容上传到云端，文档只在本地读取和写入。请注意：若 Markdown 中包含外部链接或外部图片，打开文档时这些资源仍可能发起网络请求；如需完全离线，请使用本地资源。
+
+## 🤝 参与贡献
+
+欢迎提交 Issue、功能建议和 Pull Request。提交代码前，请说明要解决的问题，并运行 `npm run build` 确保项目可以正常构建。
+
+## 📄 开源许可
+
+MarkDesk 基于 [Apache License 2.0](LICENSE) 发布。
