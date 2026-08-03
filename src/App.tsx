@@ -1,0 +1,1366 @@
+import React, { useState, useRef, useCallback, useEffect } from 'react'
+import { TitleBar } from './components/TitleBar'
+import { Toolbar } from './components/Toolbar'
+import { Sidebar } from './components/Sidebar'
+import { Editor } from './components/Editor'
+import { Preview } from './components/Preview'
+import { StatusBar } from './components/StatusBar'
+import { SearchPanel } from './components/SearchPanel'
+import { SettingsPanel } from './components/SettingsPanel'
+import { ContextMenu } from './components/ContextMenu'
+import { ShortcutHelp } from './components/ShortcutHelp'
+import { AboutModal } from './components/AboutModal'
+import pkg from '../package.json'
+
+// ── Electron IPC type (only present when running inside the desktop app) ──
+declare global {
+  interface Window {
+    electronAPI?: {
+      platform: string
+      notifyReady: () => void
+      minimizeWindow: () => void
+      closeWindow: () => void
+      onFileOpen: (cb: (file: { path: string; content: string }) => void) => void
+      openFileDialog: () => Promise<{ path: string; content: string } | null>
+      saveFile: (filePath: string, content: string) => Promise<{ success: boolean; path?: string; error?: string }>
+      saveFileAs: (defaultName: string, content: string) => Promise<{ path: string } | null>
+    }
+  }
+}
+
+const fileNameFromPath = (p: string) => p.split(/[\\/]/).pop() || p
+import { TabBar } from './components/TabBar'
+import { Resizer } from './components/Resizer'
+import type { ContextMenuItem } from './components/ContextMenu'
+import { extractHeadings, buildHeadingTree, countWords, renderMarkdown } from './utils/markdown'
+
+import { SAMPLE_CONTENT } from './utils/sampleContent'
+import {
+  toggleWrapSelection,
+  insertLinePrefix,
+  removeLinePrefix,
+  setHeadingLevel,
+  insertTable,
+  insertCodeBlock,
+  insertMermaidDiagram,
+  insertCallout,
+  insertFootnote,
+  insertFormula,
+  insertInlineFormula,
+  applyTextColor,
+  applyBgColor,
+} from './utils/editorActions'
+import { dispatchRtAction, isPreviewFocused } from './utils/richTextActions'
+import type { DisplayMode, ThemeMode, HeadingNode, SidebarTab, Settings, FileTab, RecentFile } from './types'
+
+const DEFAULT_SETTINGS: Settings = {
+  fontSize: 14,
+  tabSize: 2,
+  wordWrap: false,
+  autoSave: true,
+  autoSaveInterval: 30,
+  syncScroll: true,
+  lineNumbers: true,
+  spellCheck: false,
+  defaultDisplayMode: 'split',
+}
+
+let tabIdCounter = 0
+const genTabId = () => `tab-${++tabIdCounter}`
+
+export default function App() {
+  // ── Multi-tab state ──
+  const [tabs, setTabs] = useState<FileTab[]>([
+    { id: genTabId(), name: 'MarkDesk 示例文档.md', content: SAMPLE_CONTENT, isDirty: false },
+  ])
+  const [activeTabId, setActiveTabId] = useState(tabs[0].id)
+
+  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0]
+  const content = activeTab.content
+
+  // Always-current tabs snapshot, used by history init without forcing
+  // history-related callbacks to be recreated on every keystroke.
+  const tabsRef = useRef(tabs)
+  tabsRef.current = tabs
+
+  const updateActiveTab = useCallback((updater: (tab: FileTab) => FileTab) => {
+    setTabs((prev) => prev.map((t) => (t.id === activeTabId ? updater(t) : t)))
+  }, [activeTabId])
+
+  // ── History stack for undo/redo (per-tab) ──
+  const historyMapRef = useRef<Map<string, { stack: string[]; index: number }>>(new Map())
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+
+  const getHistory = useCallback((tabId: string) => {
+    let h = historyMapRef.current.get(tabId)
+    if (!h) {
+      const tab = tabsRef.current.find((t) => t.id === tabId)
+      h = { stack: [tab?.content ?? ''], index: 0 }
+      historyMapRef.current.set(tabId, h)
+    }
+    return h
+  }, [])
+
+  const updateHistoryFlags = useCallback(() => {
+    const h = getHistory(activeTabId)
+    setCanUndo(h.index > 0)
+    setCanRedo(h.index < h.stack.length - 1)
+  }, [getHistory, activeTabId])
+
+  const pushHistory = useCallback((newContent: string) => {
+    const h = getHistory(activeTabId)
+    h.stack = h.stack.slice(0, h.index + 1)
+    if (h.stack[h.index] === newContent) return
+    h.stack.push(newContent)
+    if (h.stack.length > 100) {
+      h.stack.shift()
+    } else {
+      h.index++
+    }
+    updateHistoryFlags()
+  }, [getHistory, activeTabId, updateHistoryFlags])
+
+  const handleUndo = useCallback(() => {
+    const h = getHistory(activeTabId)
+    if (h.index <= 0) return
+    h.index--
+    const ta = textareaRef.current
+    const savedScroll = ta?.scrollTop ?? 0
+    syncSourceRef.current = 'editor'
+    setSyncSource('editor')
+    suppressScrollSync.current = true
+    updateActiveTab((t) => ({ ...t, content: h.stack[h.index], isDirty: true }))
+    updateHistoryFlags()
+    requestAnimationFrame(() => {
+      if (ta) ta.scrollTop = savedScroll
+      setTimeout(() => { suppressScrollSync.current = false }, 50)
+    })
+  }, [getHistory, activeTabId, updateHistoryFlags, updateActiveTab])
+
+  const handleRedo = useCallback(() => {
+    const h = getHistory(activeTabId)
+    if (h.index >= h.stack.length - 1) return
+    h.index++
+    const ta = textareaRef.current
+    const savedScroll = ta?.scrollTop ?? 0
+    syncSourceRef.current = 'editor'
+    setSyncSource('editor')
+    suppressScrollSync.current = true
+    updateActiveTab((t) => ({ ...t, content: h.stack[h.index], isDirty: true }))
+    updateHistoryFlags()
+    requestAnimationFrame(() => {
+      if (ta) ta.scrollTop = savedScroll
+      setTimeout(() => { suppressScrollSync.current = false }, 50)
+    })
+  }, [getHistory, activeTabId, updateHistoryFlags, updateActiveTab])
+
+  // ── UI state ──
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    return (localStorage.getItem('markdesk-theme') as ThemeMode) || 'light'
+  })
+  const [displayMode, setDisplayMode] = useState<DisplayMode>(() => {
+    try {
+      const saved = localStorage.getItem('markdesk-settings')
+      if (saved) {
+        const s = JSON.parse(saved)
+        if (s.defaultDisplayMode) {
+          // Normalize: 'preview' mode was removed, treat as 'visual'
+          return s.defaultDisplayMode === 'preview' ? 'visual' : s.defaultDisplayMode
+        }
+      }
+    } catch {}
+    return 'split'
+  })
+  const [sidebarVisible, setSidebarVisible] = useState(true)
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('outline')
+  const [searchVisible, setSearchVisible] = useState(false)
+  const [settingsVisible, setSettingsVisible] = useState(false)
+  const [shortcutHelpVisible, setShortcutHelpVisible] = useState(false)
+  const [aboutVisible, setAboutVisible] = useState(false)
+  const [zenMode, setZenMode] = useState(false)
+  const [cursorLine, setCursorLine] = useState(0)
+  const [cursorColumn, setCursorColumn] = useState(0)
+  const [selectionStart, setSelectionStart] = useState(0)
+  const [, setSelectionEnd] = useState(0)
+  const [scrollSync, setScrollSync] = useState(0)
+  const [activeHeadingLine, setActiveHeadingLine] = useState(0)
+  const [encoding, setEncoding] = useState('UTF-8')
+  const [lineEnding, setLineEnding] = useState('LF')
+  const [dialect, setDialect] = useState('GFM')
+  const [recentFiles, setRecentFiles] = useState<RecentFile[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('markdesk-recent') || '[]')
+    } catch {
+      return []
+    }
+  })
+  const [splitRatio, setSplitRatio] = useState(0.5)
+  const [sidebarWidth, setSidebarWidth] = useState(240)
+  const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number }>({ visible: false, x: 0, y: 0 })
+
+  // ── Bidirectional sync state ──
+  const [syncSource, setSyncSource] = useState<'editor' | 'preview' | null>(null)
+  const syncSourceRef = useRef<'editor' | 'preview' | null>(null)
+
+
+  // ── Settings ──
+  const [settings, setSettings] = useState<Settings>(() => {
+    try {
+      const saved = localStorage.getItem('markdesk-settings')
+      return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS
+    } catch {
+      return DEFAULT_SETTINGS
+    }
+  })
+
+  useEffect(() => {
+    localStorage.setItem('markdesk-settings', JSON.stringify(settings))
+  }, [settings])
+
+  // ── Refs ──
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const editorScrollSource = useRef<'editor' | 'preview' | null>(null)
+  const suppressScrollSync = useRef(false)
+  const autoSaveTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const stateRef = useRef({ zenMode: false, searchVisible: false, sidebarVisible: true, displayMode: 'split' as DisplayMode, syncSource: null as ('editor' | 'preview' | null) })
+
+
+  // ── Auto-save to localStorage ──
+  useEffect(() => {
+    if (autoSaveTimer.current) clearInterval(autoSaveTimer.current)
+    if (settings.autoSave) {
+      autoSaveTimer.current = setInterval(() => {
+        localStorage.setItem('markdesk-autosave', JSON.stringify(tabsRef.current))
+      }, settings.autoSaveInterval * 1000)
+    }
+    return () => {
+      if (autoSaveTimer.current) clearInterval(autoSaveTimer.current)
+    }
+  }, [settings.autoSave, settings.autoSaveInterval])
+
+  // Save on unload
+  useEffect(() => {
+    const handler = () => {
+      localStorage.setItem('markdesk-autosave', JSON.stringify(tabsRef.current))
+      localStorage.setItem('markdesk-theme', theme)
+      localStorage.setItem('markdesk-recent', JSON.stringify(recentFiles))
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [theme, recentFiles])
+
+  // ── Restore from auto-save on mount ──
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('markdesk-autosave')
+      if (saved) {
+        const savedTabs = JSON.parse(saved) as FileTab[]
+        if (savedTabs.length > 0 && savedTabs[0].content) {
+          setTabs(savedTabs.map((t) => ({ ...t, isDirty: false })))
+          setActiveTabId(savedTabs[0].id)
+          // Sync history
+          historyMapRef.current.set(savedTabs[0].id, { stack: [savedTabs[0].content], index: 0 })
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Derived data ──
+  const headings = React.useMemo(() => {
+    const flat = extractHeadings(content)
+    return buildHeadingTree(flat)
+  }, [content])
+
+  const flatHeadings = React.useMemo(() => {
+    const result: HeadingNode[] = []
+    const collect = (nodes: HeadingNode[]) => {
+      for (const n of nodes) {
+        result.push(n)
+        collect(n.children)
+      }
+    }
+    collect(headings)
+    return result
+  }, [headings])
+
+  const stats = React.useMemo(() => countWords(content), [content])
+
+  const currentHeadingLevel = React.useMemo(() => {
+    const beforeCursor = content.substring(0, selectionStart)
+    const currentLineText = beforeCursor.split('\n').pop() || ''
+    const match = currentLineText.match(/^(#{1,6})\s+/)
+    return match ? match[1].length : 0
+  }, [content, selectionStart])
+
+  useEffect(() => {
+    const beforeCursor = content.substring(0, selectionStart)
+    const currentLineNum = beforeCursor.split('\n').length - 1
+    let active = flatHeadings.length > 0 ? flatHeadings[0] : null
+    for (const h of flatHeadings) {
+      if (h.line <= currentLineNum) {
+        active = h
+      } else {
+        break
+      }
+    }
+    if (active) {
+      setActiveHeadingLine(active.line)
+    }
+  }, [selectionStart, content, flatHeadings])
+
+  // ── Theme effect ──
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+      document.getElementById('hljs-light')?.setAttribute('disabled', 'true')
+      document.getElementById('hljs-dark')?.removeAttribute('disabled')
+    } else {
+      document.documentElement.classList.remove('dark')
+      document.getElementById('hljs-dark')?.setAttribute('disabled', 'true')
+      document.getElementById('hljs-light')?.removeAttribute('disabled')
+    }
+    localStorage.setItem('markdesk-theme', theme)
+  }, [theme])
+
+  // ── Content change handler (from textarea editor) ──
+  const handleContentChange = useCallback((newContent: string) => {
+    syncSourceRef.current = 'editor'
+    setSyncSource('editor')
+    updateActiveTab((t) => ({ ...t, content: newContent, isDirty: true }))
+    pushHistory(newContent)
+  }, [pushHistory, updateActiveTab])
+
+  // ── Content change handler (from contenteditable preview) ──
+  const handlePreviewHtmlChange = useCallback((newMarkdown: string) => {
+    if (newMarkdown === activeTab.content) return
+    syncSourceRef.current = 'preview'
+    setSyncSource('preview')
+    updateActiveTab((t) => ({ ...t, content: newMarkdown, isDirty: true }))
+    pushHistory(newMarkdown)
+    // Update textarea value if visible
+    if (textareaRef.current) {
+      const savedScroll = textareaRef.current.scrollTop
+      textareaRef.current.value = newMarkdown
+      textareaRef.current.scrollTop = savedScroll
+    }
+  }, [activeTab.content, pushHistory, updateActiveTab])
+
+  const handleCursorChange = useCallback((line: number, column: number) => {
+    setCursorLine(line)
+    setCursorColumn(column)
+  }, [])
+
+  const handleSelectionChange = useCallback((start: number, end: number) => {
+    setSelectionStart(start)
+    setSelectionEnd(end)
+  }, [])
+
+  // ── Scroll sync ──
+  const handleEditorScroll = useCallback((ratio: number) => {
+    if (editorScrollSource.current === 'preview') return
+    if (suppressScrollSync.current) return
+    if (!settings.syncScroll) return
+    editorScrollSource.current = 'editor'
+    setScrollSync(ratio)
+    setTimeout(() => { editorScrollSource.current = null }, 50)
+  }, [settings.syncScroll])
+
+  const handlePreviewScroll = useCallback((ratio: number) => {
+    if (editorScrollSource.current === 'editor') return
+    if (suppressScrollSync.current) return
+    if (!settings.syncScroll) return
+    editorScrollSource.current = 'preview'
+    setScrollSync(ratio)
+    setTimeout(() => { editorScrollSource.current = null }, 50)
+  }, [settings.syncScroll])
+
+  // ── Heading click ──
+  const handleHeadingClick = useCallback((line: number) => {
+    const ta = textareaRef.current
+
+    // ── Always scroll preview to heading when visible (split / visual mode) ──
+    const previewContainer = document.querySelector('.md-preview')?.parentElement as HTMLElement | null
+    if (previewContainer) {
+      const el = previewContainer.querySelector<HTMLElement>(`h1[data-line="${line}"], h2[data-line="${line}"], h3[data-line="${line}"], h4[data-line="${line}"], h5[data-line="${line}"], h6[data-line="${line}"]`)
+      if (el) {
+        const containerRect = previewContainer.getBoundingClientRect()
+        const elRect = el.getBoundingClientRect()
+        const offset = elRect.top - containerRect.top + previewContainer.scrollTop
+        suppressScrollSync.current = true
+        previewContainer.scrollTo({ top: Math.max(0, offset - 20), behavior: 'smooth' })
+        window.setTimeout(() => { suppressScrollSync.current = false }, 500)
+      }
+    }
+
+    // ── Also position cursor in textarea when it exists (split / edit mode) ──
+    if (ta) {
+      const lines = content.split('\n')
+      let pos = 0
+      for (let i = 0; i < line; i++) {
+        pos += lines[i].length + 1
+      }
+      ta.focus()
+      ta.selectionStart = ta.selectionEnd = pos
+      ta.scrollTop = line * (settings.fontSize * 1.6)
+      setSelectionStart(pos)
+      setSelectionEnd(pos)
+    }
+  }, [content, settings.fontSize, flatHeadings])
+
+  // ── Editor actions ──
+  const applyAction = useCallback((action: string, value?: string) => {
+    // ── Rich text mode: if preview is focused (visual/split mode), use execCommand ──
+    if (isPreviewFocused()) {
+      const handled = dispatchRtAction(action, value)
+      if (handled) return
+    }
+
+    // ── Source mode: operate on textarea ──
+    const ta = textareaRef.current
+    if (!ta) return
+
+    const text = ta.value
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    let result: { text: string; start: number; end: number } | null = null
+
+    switch (action) {
+      case 'bold': {
+        if (start === end) {
+          const placeholder = '加粗文本'
+          const insertion = `**${placeholder}**`
+          result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + 2, end: start + 2 + placeholder.length }
+        } else {
+          result = toggleWrapSelection(text, start, end, '**')
+        }
+        break
+      }
+      case 'italic': {
+        if (start === end) {
+          const placeholder = '斜体文本'
+          const insertion = `*${placeholder}*`
+          result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + 1, end: start + 1 + placeholder.length }
+        } else {
+          result = toggleWrapSelection(text, start, end, '*')
+        }
+        break
+      }
+      case 'strikethrough': {
+        if (start === end) {
+          const placeholder = '删除线文本'
+          const insertion = `~~${placeholder}~~`
+          result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + 2, end: start + 2 + placeholder.length }
+        } else {
+          result = toggleWrapSelection(text, start, end, '~~')
+        }
+        break
+      }
+      case 'code': {
+        if (start === end) {
+          const placeholder = '行内代码'
+          const insertion = `\`${placeholder}\``
+          result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + 1, end: start + 1 + placeholder.length }
+        } else {
+          result = toggleWrapSelection(text, start, end, '`')
+        }
+        break
+      }
+      case 'heading':
+        result = setHeadingLevel(text, start, end, parseInt(value || '0'))
+        break
+      case 'unordered-list':
+        result = insertLinePrefix(text, start, end, '- ')
+        break
+      case 'ordered-list':
+        result = insertLinePrefix(text, start, end, '1. ')
+        break
+      case 'task-list':
+        result = insertLinePrefix(text, start, end, '- [ ] ')
+        break
+      case 'quote':
+        result = insertLinePrefix(text, start, end, '> ')
+        break
+      case 'link': {
+        const sel = text.slice(start, end) || '链接文本'
+        const insertion = `[${sel}](https://)`
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + sel.length + 3, end: start + sel.length + 3 }
+        break
+      }
+      case 'image': {
+        const sel = text.slice(start, end) || '图片描述'
+        const insertion = `![${sel}](https://)`
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + sel.length + 4, end: start + sel.length + 4 }
+        break
+      }
+      case 'table': {
+        const insertion = '\n' + insertTable(3, 3) + '\n'
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + insertion.length, end: start + insertion.length }
+        break
+      }
+      case 'codeblock': {
+        const insertion = insertCodeBlock('typescript')
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + insertion.length - 6, end: start + insertion.length - 6 }
+        break
+      }
+      case 'hr': {
+        const insertion = '\n---\n'
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + insertion.length, end: start + insertion.length }
+        break
+      }
+      case 'date': {
+        const now = new Date()
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
+        result = { text: text.slice(0, start) + dateStr + text.slice(end), start: start + dateStr.length, end: start + dateStr.length }
+        break
+      }
+      case 'emoji': {
+        const emoji = value || '😀'
+        result = { text: text.slice(0, start) + emoji + text.slice(end), start: start + emoji.length, end: start + emoji.length }
+        break
+      }
+      case 'highlight': {
+        const sel = text.slice(start, end) || '高亮文本'
+        const insertion = `==${sel}==`
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + 3, end: start + sel.length + 3 }
+        break
+      }
+      case 'underline': {
+        const sel = text.slice(start, end) || '下划线文本'
+        const insertion = `<u>${sel}</u>`
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + 3, end: start + sel.length + 3 }
+        break
+      }
+      case 'formula': {
+        const insertion = insertFormula()
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + insertion.length - 6, end: start + insertion.length - 6 }
+        break
+      }
+      case 'inline-formula': {
+        const insertion = insertInlineFormula()
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + insertion.length - 1, end: start + insertion.length - 1 }
+        break
+      }
+      case 'mermaid': {
+        const insertion = insertMermaidDiagram('graph TD')
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + insertion.length - 6, end: start + insertion.length - 6 }
+        break
+      }
+      case 'callout': {
+        const insertion = insertCallout('INFO')
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + insertion.length - 6, end: start + insertion.length - 6 }
+        break
+      }
+      case 'footnote': {
+        const insertion = insertFootnote()
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + insertion.length - 6, end: start + insertion.length - 6 }
+        break
+      }
+      case 'toc': {
+        const insertion = '\n[TOC]\n'
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + insertion.length, end: start + insertion.length }
+        break
+      }
+      case 'indent': {
+        result = insertLinePrefix(text, start, end, '  ')
+        break
+      }
+      case 'outdent': {
+        result = removeLinePrefix(text, start, end, '  ')
+        break
+      }
+      case 'text-color': {
+        if (!value) {
+          // Clear color: remove surrounding span tags
+          const before = text.slice(0, start)
+          const sel = text.slice(start, end)
+          const after = text.slice(end)
+          // Check if selection is inside a span
+          const spanMatch = before.match(/<span style="color: [^"]+">$/) && after.match(/^<\/span>/)
+          if (spanMatch) {
+            result = {
+              text: before.replace(/<span style="color: [^"]+">$/, '') + sel + after.replace(/^<\/span>/, ''),
+              start: start - before.match(/<span style="color: [^"]+">$/)![0].length,
+              end: end - before.match(/<span style="color: [^"]+">$/)![0].length,
+            }
+          } else {
+            result = { text: text, start, end }
+          }
+        } else {
+          result = applyTextColor(text, start, end, value)
+        }
+        break
+      }
+      case 'bg-color': {
+        result = applyBgColor(text, start, end, value || '#fff3cd')
+        break
+      }
+      case 'font-size': {
+        const sel = text.slice(start, end) || '字号文字'
+        const insertion = `<span style="font-size: ${value || 14}px">${sel}</span>`
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + insertion.length, end: start + insertion.length }
+        break
+      }
+      case 'font-size-up': {
+        const sel = text.slice(start, end) || '放大文字'
+        const insertion = `<span style="font-size: larger">${sel}</span>`
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + insertion.length, end: start + insertion.length }
+        break
+      }
+      case 'font-size-down': {
+        const sel = text.slice(start, end) || '缩小文字'
+        const insertion = `<span style="font-size: smaller">${sel}</span>`
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + insertion.length, end: start + insertion.length }
+        break
+      }
+    }
+
+    if (result) {
+      const savedEditorScroll = ta.scrollTop
+      const previewEl = document.querySelector('.md-preview')?.parentElement as HTMLElement | null
+      const savedPreviewScroll = previewEl?.scrollTop ?? 0
+
+      suppressScrollSync.current = true
+
+      ta.value = result.text
+      updateActiveTab((t) => ({ ...t, content: result!.text, isDirty: true }))
+        pushHistory(result.text)
+      requestAnimationFrame(() => {
+        ta.focus()
+        ta.selectionStart = result!.start
+        ta.selectionEnd = result!.end
+        ta.scrollTop = savedEditorScroll
+        if (previewEl) {
+          previewEl.scrollTop = savedPreviewScroll
+        }
+        setSelectionStart(result!.start)
+        setSelectionEnd(result!.end)
+        setTimeout(() => { suppressScrollSync.current = false }, 50)
+      })
+    }
+  }, [pushHistory, updateActiveTab])
+
+  // ── Tab operations ──
+  const handleNewTab = useCallback(() => {
+    const newTab: FileTab = { id: genTabId(), name: '未命名.md', content: '', isDirty: false }
+    setTabs((prev) => [...prev, newTab])
+    setActiveTabId(newTab.id)
+    historyMapRef.current.set(newTab.id, { stack: [''], index: 0 })
+    updateHistoryFlags()
+  }, [updateHistoryFlags])
+
+  const handleTabClose = useCallback((id: string) => {
+    setTabs((prev) => {
+      if (prev.length <= 1) return prev
+      const idx = prev.findIndex((t) => t.id === id)
+      const newTabs = prev.filter((t) => t.id !== id)
+      if (id === activeTabId) {
+        const newActive = newTabs[Math.min(idx, newTabs.length - 1)]
+        setActiveTabId(newActive.id)
+        // Preserve existing history; only init if not present
+        if (!historyMapRef.current.has(newActive.id)) {
+          historyMapRef.current.set(newActive.id, { stack: [newActive.content], index: 0 })
+        }
+        updateHistoryFlags()
+      }
+      return newTabs
+    })
+  }, [activeTabId, updateHistoryFlags])
+
+  const handleTabClick = useCallback((id: string) => {
+    setActiveTabId(id)
+    // Don't reset history — getHistory will lazily initialize if needed
+    updateHistoryFlags()
+  }, [updateHistoryFlags])
+
+  // ── File operations ──
+  const addRecentFile = useCallback((name: string, path: string) => {
+    setRecentFiles((prev) => {
+      const filtered = prev.filter((f) => f.path !== path)
+      return [{ name, path, time: Date.now() }, ...filtered].slice(0, 10)
+    })
+  }, [])
+
+  const handleNewFile = useCallback(() => {
+    handleNewTab()
+  }, [handleNewTab])
+
+  const handleOpenFile = useCallback(() => {
+    const api = window.electronAPI
+    if (api) {
+      // Desktop app: use native dialog that returns a real file path
+      api.openFileDialog().then((file) => {
+        if (!file) return
+        const name = fileNameFromPath(file.path)
+        const newTab: FileTab = { id: genTabId(), name, content: file.content, isDirty: false, filePath: file.path }
+        setTabs((prev) => [...prev, newTab])
+        setActiveTabId(newTab.id)
+        historyMapRef.current.set(newTab.id, { stack: [file.content], index: 0 })
+        updateHistoryFlags()
+        addRecentFile(name, file.path)
+      })
+      return
+    }
+    // Browser fallback
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.md,.markdown,.txt,.mdx'
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        const text = reader.result as string
+        const newTab: FileTab = { id: genTabId(), name: file.name, content: text, isDirty: false, filePath: (file as any).path }
+        setTabs((prev) => [...prev, newTab])
+        setActiveTabId(newTab.id)
+        historyMapRef.current.set(newTab.id, { stack: [text], index: 0 })
+        updateHistoryFlags()
+        addRecentFile(file.name, (file as any).path || file.name)
+      }
+      reader.readAsText(file)
+    }
+    input.click()
+  }, [updateHistoryFlags, addRecentFile])
+
+  const handleDropFile = useCallback((file: File) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = reader.result as string
+      const newTab: FileTab = { id: genTabId(), name: file.name, content: text, isDirty: false, filePath: (file as any).path }
+      setTabs((prev) => [...prev, newTab])
+      setActiveTabId(newTab.id)
+      historyMapRef.current.set(newTab.id, { stack: [text], index: 0 })
+      updateHistoryFlags()
+      addRecentFile(file.name, (file as any).path || file.name)
+    }
+    reader.readAsText(file)
+  }, [updateHistoryFlags, addRecentFile])
+
+  const handlePasteImage = useCallback((dataUrl: string, name: string) => {
+    const ta = textareaRef.current
+    if (!ta) {
+      // Visual mode: insert image markdown at end of content
+      const insertion = `\n![${name}](${dataUrl})\n`
+      const newText = content + insertion
+      syncSourceRef.current = 'editor'
+      setSyncSource('editor')
+      updateActiveTab((t) => ({ ...t, content: newText, isDirty: true }))
+      pushHistory(newText)
+      return
+    }
+    const start = ta.selectionStart
+    const insertion = `![${name}](${dataUrl})\n`
+    const newText = ta.value.slice(0, start) + insertion + ta.value.slice(start)
+    ta.value = newText
+    updateActiveTab((t) => ({ ...t, content: newText, isDirty: true }))
+    pushHistory(newText)
+    requestAnimationFrame(() => {
+      ta.focus()
+      ta.selectionStart = ta.selectionEnd = start + insertion.length
+    })
+  }, [pushHistory, updateActiveTab, content])
+
+  const handleSave = useCallback(() => {
+    const api = window.electronAPI
+    if (api && activeTab.filePath) {
+      // Desktop app with a known file path: write straight to disk
+      api.saveFile(activeTab.filePath, content).then((res) => {
+        if (res?.success) updateActiveTab((t) => ({ ...t, isDirty: false }))
+      })
+      return
+    }
+    // Browser fallback / unsaved tab: download
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = activeTab.name
+    a.click()
+    URL.revokeObjectURL(url)
+    updateActiveTab((t) => ({ ...t, isDirty: false }))
+  }, [content, activeTab.name, activeTab.filePath, updateActiveTab])
+
+  const handleSaveAs = useCallback(() => {
+    const api = window.electronAPI
+    if (api) {
+      // Desktop app: native save-as dialog (writes the file)
+      api.saveFileAs(activeTab.name, content).then((res) => {
+        if (res?.path) {
+          updateActiveTab((t) => ({ ...t, name: fileNameFromPath(res.path), filePath: res.path, isDirty: false }))
+        }
+      })
+      return
+    }
+    // Browser fallback
+    const fileName = prompt('请输入文件名', activeTab.name)
+    if (!fileName) return
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName.endsWith('.md') ? fileName : fileName + '.md'
+    a.click()
+    URL.revokeObjectURL(url)
+    updateActiveTab((t) => ({ ...t, name: fileName.endsWith('.md') ? fileName : fileName + '.md', isDirty: false }))
+  }, [content, activeTab.name, updateActiveTab])
+
+  const handleExportMD = handleSave
+
+  const handleExportHTML = useCallback(() => {
+    const html = renderMarkdown(content)
+    const fullHTML = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${activeTab.name}</title>
+<style>
+body { font-family: -apple-system, system-ui, 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: rgba(0,0,0,0.95); }
+pre { background: #f6f5f4; border-radius: 8px; padding: 16px; overflow-x: auto; }
+code { font-family: 'Consolas', monospace; background: rgba(0,0,0,0.05); padding: 0.15em 0.35em; border-radius: 3px; }
+pre code { background: transparent; padding: 0; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid rgba(0,0,0,0.1); padding: 8px 12px; }
+blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59; margin: 0; }
+</style>
+</head>
+<body>
+${html}
+</body>
+</html>`
+    const blob = new Blob([fullHTML], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = activeTab.name.replace(/\.md$/, '.html')
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [content, activeTab.name])
+
+  const handleExportPDF = useCallback(() => {
+    const printContent = renderMarkdown(content)
+    const win = window.open('', '_blank')
+    if (!win) return
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${activeTab.name}</title>
+<style>
+body { font-family: -apple-system, system-ui, 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: rgba(0,0,0,0.95); }
+pre { background: #f6f5f4; border-radius: 8px; padding: 16px; overflow-x: auto; }
+code { font-family: 'Consolas', monospace; background: rgba(0,0,0,0.05); padding: 0.15em 0.35em; border-radius: 3px; }
+pre code { background: transparent; padding: 0; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid rgba(0,0,0,0.1); padding: 8px 12px; }
+blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59; margin: 0; }
+</style></head><body>${printContent}</body></html>`)
+    win.document.close()
+    setTimeout(() => { win.print() }, 500)
+  }, [content, activeTab.name])
+
+  // ── Search replace ──
+  const handleSearchNavigate = useCallback((_index: number, start: number, end: number) => {
+    const ta = textareaRef.current
+    if (!ta) {
+      // Visual mode: approximate scroll by content ratio
+      const previewContainer = document.querySelector('.md-preview')?.parentElement as HTMLElement | null
+      if (previewContainer) {
+        const ratio = start / content.length
+        const maxScroll = previewContainer.scrollHeight - previewContainer.clientHeight
+        previewContainer.scrollTop = maxScroll * ratio
+      }
+      setSelectionStart(start)
+      setSelectionEnd(end)
+      return
+    }
+    ta.focus()
+    ta.selectionStart = start
+    ta.selectionEnd = end
+    setSelectionStart(start)
+    setSelectionEnd(end)
+    const beforeCursor = ta.value.substring(0, start)
+    const lines = beforeCursor.split('\n')
+    const lineNum = lines.length - 1
+    ta.scrollTop = Math.max(0, lineNum * (settings.fontSize * 1.6) - ta.clientHeight / 2)
+  }, [settings.fontSize, content])
+
+  const handleSearchReplace = useCallback((_index: number, newText: string, start: number, end: number) => {
+    const ta = textareaRef.current
+    if (!ta) {
+      // Visual mode: replace in content directly
+      const replaced = content.slice(0, start) + newText + content.slice(end)
+      syncSourceRef.current = 'editor'
+      setSyncSource('editor')
+      updateActiveTab((t) => ({ ...t, content: replaced, isDirty: true }))
+      pushHistory(replaced)
+      setSelectionStart(start + newText.length)
+      setSelectionEnd(start + newText.length)
+      return
+    }
+    const text = ta.value
+    const replaced = text.slice(0, start) + newText + text.slice(end)
+    ta.value = replaced
+    updateActiveTab((t) => ({ ...t, content: replaced, isDirty: true }))
+    pushHistory(replaced)
+    requestAnimationFrame(() => {
+      ta.focus()
+      ta.selectionStart = start
+      ta.selectionEnd = start + newText.length
+    })
+  }, [pushHistory, updateActiveTab, content])
+
+  const handleSearchReplaceAll = useCallback((query: string, replaceText: string, caseSensitive: boolean, useRegex: boolean) => {
+    const ta = textareaRef.current
+    if (!ta) {
+      // Visual mode: replace in content directly
+      let text = content
+      let count = 0
+      try {
+        let regex: RegExp
+        if (useRegex) {
+          regex = new RegExp(query, caseSensitive ? 'g' : 'gi')
+        } else {
+          const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          regex = new RegExp(escaped, caseSensitive ? 'g' : 'gi')
+        }
+        const matches = text.match(regex)
+        count = matches ? matches.length : 0
+        if (count > 0) {
+          const replacement = useRegex ? replaceText : replaceText.replace(/\$/g, '$$$$')
+          text = text.replace(regex, replacement)
+          syncSourceRef.current = 'editor'
+          setSyncSource('editor')
+          updateActiveTab((t) => ({ ...t, content: text, isDirty: true }))
+          pushHistory(text)
+        }
+      } catch {
+        return 0
+      }
+      return count
+    }
+    let text = ta.value
+    let count = 0
+    try {
+      let regex: RegExp
+      if (useRegex) {
+        regex = new RegExp(query, caseSensitive ? 'g' : 'gi')
+      } else {
+        const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        regex = new RegExp(escaped, caseSensitive ? 'g' : 'gi')
+      }
+      const matches = text.match(regex)
+      count = matches ? matches.length : 0
+      if (count > 0) {
+        // For plain text, escape $ to prevent special replacement interpretation
+        const replacement = useRegex ? replaceText : replaceText.replace(/\$/g, '$$$$')
+        text = text.replace(regex, replacement)
+        ta.value = text
+        updateActiveTab((t) => ({ ...t, content: text, isDirty: true }))
+        pushHistory(text)
+      }
+    } catch {
+      return 0
+    }
+    return count
+  }, [pushHistory, updateActiveTab, content])
+
+  // ── Recent files ──
+  const handleOpenRecent = useCallback((_file: RecentFile) => {
+    // For local file paths, we can't directly read them in browser
+    // Just trigger file picker
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.onchange = (e) => {
+      const f = (e.target as HTMLInputElement).files?.[0]
+      if (!f) return
+      const r = new FileReader()
+      r.onload = () => {
+        const text = r.result as string
+        const newTab: FileTab = { id: genTabId(), name: f.name, content: text, isDirty: false, filePath: (f as any).path }
+        setTabs((prev) => [...prev, newTab])
+        setActiveTabId(newTab.id)
+        historyMapRef.current.set(newTab.id, { stack: [text], index: 0 })
+        updateHistoryFlags()
+      }
+      r.readAsText(f)
+    }
+    input.click()
+  }, [updateHistoryFlags])
+
+  const handleClearRecent = useCallback(() => {
+    setRecentFiles([])
+    localStorage.removeItem('markdesk-recent')
+  }, [])
+
+  // ── Context menu ──
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setContextMenu({ visible: true, x: e.clientX, y: e.clientY })
+  }, [])
+
+  const contextMenuItems: ContextMenuItem[] = [
+    {
+      label: '剪切', shortcut: 'Ctrl+X',
+      onClick: async () => {
+        if (isPreviewFocused()) {
+          try { document.execCommand('cut') } catch {}
+          return
+        }
+        const ta = textareaRef.current
+        if (!ta) return
+        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd)
+        try { await navigator.clipboard.writeText(sel) } catch {}
+        const newText = ta.value.slice(0, ta.selectionStart) + ta.value.slice(ta.selectionEnd)
+        ta.value = newText
+        updateActiveTab((t) => ({ ...t, content: newText, isDirty: true }))
+        pushHistory(newText)
+      }
+    },
+    {
+      label: '复制', shortcut: 'Ctrl+C',
+      onClick: async () => {
+        if (isPreviewFocused()) {
+          try { document.execCommand('copy') } catch {}
+          return
+        }
+        const ta = textareaRef.current
+        if (!ta) return
+        try { await navigator.clipboard.writeText(ta.value.slice(ta.selectionStart, ta.selectionEnd)) } catch {}
+      }
+    },
+    {
+      label: '粘贴', shortcut: 'Ctrl+V',
+      onClick: async () => {
+        if (isPreviewFocused()) {
+          try {
+            const text = await navigator.clipboard.readText()
+            document.execCommand('insertText', false, text)
+          } catch {}
+          return
+        }
+        const ta = textareaRef.current
+        if (!ta) return
+        try {
+          const text = await navigator.clipboard.readText()
+          const pos = ta.selectionStart
+          const newText = ta.value.slice(0, pos) + text + ta.value.slice(ta.selectionEnd)
+          ta.value = newText
+          updateActiveTab((t) => ({ ...t, content: newText, isDirty: true }))
+          pushHistory(newText)
+          requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = pos + text.length })
+        } catch {}
+      }
+    },
+    { divider: true },
+    { label: '加粗', shortcut: 'Ctrl+B', onClick: () => applyAction('bold') },
+    { label: '斜体', shortcut: 'Ctrl+I', onClick: () => applyAction('italic') },
+    { divider: true },
+    { label: '插入链接', onClick: () => applyAction('link') },
+    { label: '插入表格', onClick: () => applyAction('table') },
+    { label: '插入代码块', onClick: () => applyAction('codeblock') },
+  ]
+
+  // ── Zoom ──
+  const handleZoomIn = useCallback(() => {
+    setSettings((s) => ({ ...s, fontSize: Math.min(24, s.fontSize + 1) }))
+  }, [])
+  const handleZoomOut = useCallback(() => {
+    setSettings((s) => ({ ...s, fontSize: Math.max(12, s.fontSize - 1) }))
+  }, [])
+
+  // Sync latest state to ref for keyboard handler (avoids stale closure)
+  stateRef.current = { zenMode, searchVisible, sidebarVisible, displayMode, syncSource: syncSourceRef.current }
+
+  // ── Keyboard shortcuts ──
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey
+      const s = stateRef.current
+
+      if (ctrl && e.key === 'n' && !e.shiftKey) { e.preventDefault(); handleNewFile(); return }
+      if (ctrl && e.key === 'o' && !e.shiftKey) { e.preventDefault(); handleOpenFile(); return }
+      if (ctrl && e.key === 's' && !e.shiftKey) { e.preventDefault(); handleSave(); return }
+      if (ctrl && e.shiftKey && e.key === 'S') { e.preventDefault(); handleSaveAs(); return }
+      if (ctrl && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); return }
+      if ((ctrl && e.key === 'y') || (ctrl && e.shiftKey && e.key === 'Z')) { e.preventDefault(); handleRedo(); return }
+      if (ctrl && e.key === 'b' && !e.shiftKey) { e.preventDefault(); applyAction('bold'); return }
+      if (ctrl && e.key === 'i' && !e.shiftKey) { e.preventDefault(); applyAction('italic'); return }
+      if (ctrl && e.key === 'f' && !e.shiftKey) { e.preventDefault(); setSearchVisible(true); return }
+      if (ctrl && e.key === 'h' && !e.shiftKey) { e.preventDefault(); setSearchVisible(true); return }
+      if (ctrl && e.key === 'e' && !e.shiftKey) { e.preventDefault(); setDisplayMode('edit'); return }
+      if (ctrl && e.key === 'r' && !e.shiftKey) { e.preventDefault(); setDisplayMode('visual'); return }
+      if (ctrl && e.shiftKey && e.key === 'V') { e.preventDefault(); setDisplayMode('visual'); return }
+      if (ctrl && e.key >= '1' && e.key <= '6') { e.preventDefault(); applyAction('heading', e.key); return }
+      if (ctrl && e.key === '0') { e.preventDefault(); applyAction('heading', '0'); return }
+      if (ctrl && e.shiftKey && e.key === 'M') { e.preventDefault(); setSidebarVisible(!s.sidebarVisible); return }
+      if (ctrl && e.shiftKey && e.key === 'K') { e.preventDefault(); applyAction('codeblock'); return }
+      if (ctrl && e.shiftKey && e.key === 'T') { e.preventDefault(); applyAction('table'); return }
+      if (ctrl && e.shiftKey && e.key === 'L') { e.preventDefault(); applyAction('link'); return }
+      if (ctrl && e.key === '=') { e.preventDefault(); handleZoomIn(); return }
+      if (ctrl && e.key === '-') { e.preventDefault(); handleZoomOut(); return }
+      if (ctrl && e.shiftKey && e.key === '/') { e.preventDefault(); setShortcutHelpVisible(true); return }
+      if (ctrl && e.key === '/') { e.preventDefault(); setShortcutHelpVisible(true); return }
+      if (e.key === 'F11') { e.preventDefault(); setZenMode(!s.zenMode); return }
+      if (e.key === 'Escape' && s.searchVisible) { setSearchVisible(false); return }
+      if (e.key === 'Escape' && s.zenMode) { setZenMode(false); return }
+    }
+
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [applyAction, handleUndo, handleRedo, handleNewFile, handleOpenFile, handleSave, handleSaveAs, handleZoomIn, handleZoomOut])
+
+  // ── Electron: notify ready & open files passed via OS file association ──
+  useEffect(() => {
+    const api = window.electronAPI
+    if (!api) return
+    api.notifyReady()
+    const openFile = (file: { path: string; content: string }) => {
+      const name = fileNameFromPath(file.path)
+      const newTab: FileTab = { id: genTabId(), name, content: file.content, isDirty: false, filePath: file.path }
+      setTabs((prev) => [...prev, newTab])
+      setActiveTabId(newTab.id)
+      historyMapRef.current.set(newTab.id, { stack: [file.content], index: 0 })
+      updateHistoryFlags()
+      addRecentFile(name, file.path)
+    }
+    api.onFileOpen(openFile)
+  }, [updateHistoryFlags, addRecentFile])
+
+  // ── Render ──
+  if (zenMode) {
+    return (
+      <div className="flex flex-col h-screen bg-white dark:bg-dark-bg">
+        <div className="flex flex-1 overflow-hidden">
+          {(displayMode === 'edit' || displayMode === 'split') && (
+            <div
+              style={{ width: displayMode === 'split' ? `${splitRatio * 100}%` : displayMode === 'edit' ? '100%' : 0 }}
+              className={displayMode === 'split' ? 'border-r border-whisper-border dark:border-dark-border' : ''}
+            >
+              <Editor
+                content={content}
+                onChange={handleContentChange}
+                onCursorChange={handleCursorChange}
+                onSelectionChange={handleSelectionChange}
+                textareaRef={textareaRef}
+                scrollSync={scrollSync}
+                onScroll={handleEditorScroll}
+                settings={settings}
+                onDropFile={handleDropFile}
+                onPasteImage={handlePasteImage}
+                onContextMenu={handleContextMenu}
+              />
+            </div>
+          )}
+          {displayMode === 'split' && (
+            <Resizer onResize={(delta) => {
+              setSplitRatio((r) => Math.max(0.2, Math.min(0.8, r + delta / window.innerWidth)))
+            }} />
+          )}
+          {(displayMode === 'split' || displayMode === 'visual') && (
+            <div className="h-full overflow-hidden" style={{ width: displayMode === 'split' ? `${(1 - splitRatio) * 100}%` : '100%' }}>
+              <Preview
+                content={content}
+                scrollSync={scrollSync}
+                onScroll={handlePreviewScroll}
+                settings={settings}
+                onHeadingClick={handleHeadingClick}
+                editable={displayMode === 'split' || displayMode === 'visual'}
+                onHtmlChange={handlePreviewHtmlChange}
+                syncSource={syncSource}
+              />
+            </div>
+          )}
+        </div>
+        <SearchPanel
+          visible={searchVisible}
+          onClose={() => setSearchVisible(false)}
+          content={content}
+          onNavigate={handleSearchNavigate}
+          onReplace={handleSearchReplace}
+          onReplaceAll={handleSearchReplaceAll}
+        />
+        <ContextMenu
+          visible={contextMenu.visible}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenuItems}
+          onClose={() => setContextMenu({ visible: false, x: 0, y: 0 })}
+        />
+        {/* Zen mode exit hint */}
+        <div className="fixed top-2 right-2 text-xs text-warm-gray-300 bg-white/80 dark:bg-dark-surface/80 px-2 py-1 rounded shadow-sm pointer-events-none">
+          按 F11 或 Esc 退出专注模式
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-screen bg-white dark:bg-dark-bg">
+      {/* Title Bar */}
+      <TitleBar
+        fileName={activeTab.name}
+        isDirty={activeTab.isDirty}
+        theme={theme}
+        onToggleSidebar={() => setSidebarVisible(!sidebarVisible)}
+        onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+        onNewFile={handleNewFile}
+        onOpenFile={handleOpenFile}
+        onSave={handleSave}
+        onSaveAs={handleSaveAs}
+        onExportMD={handleExportMD}
+        onExportHTML={handleExportHTML}
+        onExportPDF={handleExportPDF}
+        onZenMode={() => setZenMode(true)}
+      />
+
+      {/* Toolbar */}
+      <Toolbar
+        onAction={applyAction}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        displayMode={displayMode}
+        onModeChange={setDisplayMode}
+        onSearchToggle={() => setSearchVisible(!searchVisible)}
+        currentHeadingLevel={currentHeadingLevel}
+        onSettings={() => setSettingsVisible(true)}
+        fontSize={settings.fontSize}
+        onFontSizeChange={(size) => setSettings((s) => ({ ...s, fontSize: size }))}
+        onShortcutHelp={() => setShortcutHelpVisible(true)}
+        onAbout={() => setAboutVisible(true)}
+      />
+
+      {/* Tab Bar */}
+      <TabBar
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onTabClick={handleTabClick}
+        onTabClose={handleTabClose}
+        onNewTab={handleNewTab}
+      />
+
+      {/* Search Panel */}
+      <SearchPanel
+        visible={searchVisible}
+        onClose={() => setSearchVisible(false)}
+        content={content}
+        onNavigate={handleSearchNavigate}
+        onReplace={handleSearchReplace}
+        onReplaceAll={handleSearchReplaceAll}
+      />
+
+      {/* Main content area */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        {sidebarVisible && (
+          <>
+            <div style={{ width: `${sidebarWidth}px` }} className="flex-shrink-0">
+              <Sidebar
+                headings={headings}
+                activeHeadingLine={activeHeadingLine}
+                onHeadingClick={handleHeadingClick}
+                fileName={activeTab.name}
+                sidebarTab={sidebarTab}
+                onTabChange={setSidebarTab}
+                recentFiles={recentFiles}
+                onOpenRecent={handleOpenRecent}
+                onClearRecent={handleClearRecent}
+              />
+            </div>
+            <Resizer onResize={(delta) => setSidebarWidth((w) => Math.max(160, Math.min(500, w + delta)))} />
+          </>
+        )}
+
+        {/* Editor + Preview */}
+        <div className="flex flex-1 overflow-hidden">
+          {(displayMode === 'edit' || displayMode === 'split') && (
+            <>
+              <div
+                className={displayMode === 'split' ? 'border-r border-whisper-border dark:border-dark-border' : 'w-full'}
+                style={displayMode === 'split' ? { width: `${splitRatio * 100}%` } : undefined}
+              >
+                <Editor
+                  content={content}
+                  onChange={handleContentChange}
+                  onCursorChange={handleCursorChange}
+                  onSelectionChange={handleSelectionChange}
+                  textareaRef={textareaRef}
+                  scrollSync={scrollSync}
+                  onScroll={handleEditorScroll}
+                  settings={settings}
+                  onDropFile={handleDropFile}
+                  onPasteImage={handlePasteImage}
+                  onContextMenu={handleContextMenu}
+                />
+              </div>
+              {displayMode === 'split' && (
+                <Resizer onResize={(delta) => {
+                  const container = document.querySelector('.flex.flex-1.overflow-hidden > .flex.flex-1') as HTMLElement
+                  if (container) {
+                    const width = container.clientWidth
+                    setSplitRatio((r) => Math.max(0.2, Math.min(0.8, r + delta / width)))
+                  }
+                }} />
+              )}
+            </>
+          )}
+          {(displayMode === 'split' || displayMode === 'visual') && (
+            <div className={displayMode === 'split' ? 'flex-1 overflow-hidden' : 'w-full h-full overflow-hidden'}>
+              <Preview
+                content={content}
+                scrollSync={scrollSync}
+                onScroll={handlePreviewScroll}
+                settings={settings}
+                onHeadingClick={handleHeadingClick}
+                editable={displayMode === 'split' || displayMode === 'visual'}
+                onHtmlChange={handlePreviewHtmlChange}
+                syncSource={syncSource}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Status Bar */}
+      <StatusBar
+        wordCount={stats.words}
+        charCount={stats.chars}
+        lineCount={stats.lines}
+        cursorLine={cursorLine}
+        cursorColumn={cursorColumn}
+        encoding={encoding}
+        lineEnding={lineEnding}
+        dialect={dialect}
+        onEncodingChange={setEncoding}
+        onLineEndingChange={setLineEnding}
+        onDialectChange={setDialect}
+      />
+
+      {/* Modals */}
+      <SettingsPanel
+        visible={settingsVisible}
+        settings={settings}
+        onChange={setSettings}
+        onClose={() => setSettingsVisible(false)}
+      />
+      <ShortcutHelp
+        visible={shortcutHelpVisible}
+        onClose={() => setShortcutHelpVisible(false)}
+      />
+      <AboutModal
+        visible={aboutVisible}
+        onClose={() => setAboutVisible(false)}
+        version={pkg.version}
+      />
+      <ContextMenu
+        visible={contextMenu.visible}
+        x={contextMenu.x}
+        y={contextMenu.y}
+        items={contextMenuItems}
+        onClose={() => setContextMenu({ visible: false, x: 0, y: 0 })}
+      />
+    </div>
+  )
+}

@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, system-ui, 'Segoe UI', Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom scrollbar - Notion style */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+}
+
+@layer components {
+  /* Toolbar button base */
+  .tb-btn {
+    @apply flex items-center justify-center w-8 h-8 rounded-notion
+           text-near-black dark:text-dark-text
+           hover:bg-warm-white dark:hover:bg-dark-surface
+           transition-all duration-150 cursor-pointer
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .tb-btn.active {
+    @apply bg-notion-blue-bg text-notion-blue dark:bg-blue-900/30 dark:text-blue-400;
+  }
+
+  .tb-divider {
+    @apply w-px h-5 bg-whisper-border dark:bg-dark-border mx-1 flex-shrink-0;
+  }
+
+  /* Sidebar item */
+  .sidebar-item {
+    @apply flex items-center gap-1.5 px-2 py-1 rounded-notion
+           text-sm text-warm-gray-500 dark:text-dark-text-muted
+           hover:bg-warm-white dark:hover:bg-dark-surface
+           cursor-pointer transition-colors duration-100;
+  }
+
+  .sidebar-item.active {
+    @apply bg-notion-blue-bg text-notion-blue dark:bg-blue-900/30 dark:text-blue-400;
+  }
+}

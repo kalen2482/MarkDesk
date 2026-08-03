@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MarkDesk 代码审查报告 — 2026-07-31</title>
+<style>
+  :root {
+    --bg: #f8f7f5; --card: #ffffff; --border: #e5e4e2;
+    --text: #2d2d2d; --muted: #8a8a8a; --accent: #0075de;
+    --red: #e74c3c; --orange: #e67e22; --green: #27ae60; --blue: #3498db;
+    --red-bg: #fdf2f2; --orange-bg: #fef9f0; --green-bg: #f0faf3; --blue-bg: #f0f7ff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, system-ui, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+  .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+  h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+  .meta { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; text-align: center; }
+  .stat-num { font-size: 32px; font-weight: 700; }
+  .stat-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .stat.critical .stat-num { color: var(--red); }
+  .stat.medium .stat-num { color: var(--orange); }
+  .stat.minor .stat-num { color: var(--blue); }
+  .stat.fixed .stat-num { color: var(--green); }
+  h2 { font-size: 20px; font-weight: 600; margin: 32px 0 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border); }
+  .bug-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+  .bug-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .bug-id { font-size: 13px; font-weight: 600; color: var(--muted); font-family: monospace; }
+  .bug-title { font-size: 16px; font-weight: 600; flex: 1; }
+  .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .badge.critical { background: var(--red-bg); color: var(--red); }
+  .badge.medium { background: var(--orange-bg); color: var(--orange); }
+  .badge.minor { background: var(--blue-bg); color: var(--blue); }
+  .badge.fixed { background: var(--green-bg); color: var(--green); }
+  .bug-body { font-size: 14px; }
+  .bug-body p { margin-bottom: 8px; }
+  .bug-body code { background: #f4f3f1; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', monospace; font-size: 13px; }
+  .bug-section { margin-bottom: 8px; }
+  .bug-section-label { font-weight: 600; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .bug-file { font-family: monospace; font-size: 13px; color: var(--accent); }
+  .check-list { list-style: none; }
+  .check-list li { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 8px; font-size: 14px; }
+  .check-list li:last-child { border-bottom: none; }
+  .check-icon { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+  .check-icon.ok { background: var(--green-bg); color: var(--green); }
+  .check-icon.bad { background: var(--red-bg); color: var(--red); }
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>MarkDesk 全面代码审查报告</h1>
+  <div class="meta">审查日期：2026-07-31 | 审查范围：App.tsx, Preview.tsx, Toolbar.tsx, Editor.tsx, markdown.ts, htmlToMarkdown.ts, richTextActions.ts, editorActions.ts, SettingsPanel.tsx, types.ts | 构建状态：通过</div>
+
+  <div class="summary">
+    <div class="stat critical"><div class="stat-num">6</div><div class="stat-label">严重 Bug</div></div>
+    <div class="stat medium"><div class="stat-num">5</div><div class="stat-label">中等 Bug</div></div>
+    <div class="stat minor"><div class="stat-num">2</div><div class="stat-label">轻微问题</div></div>
+    <div class="stat fixed"><div class="stat-num">13</div><div class="stat-label">已修复</div></div>
+  </div>
+
+  <h2>严重 Bug (Critical)</h2>
+
+  <div class="bug-card">
+    <div class="bug-header">
+      <span class="bug-id">#01</span>
+      <span class="bug-title">双向同步时序错误：预览编辑后内容被覆盖</span>
+      <span class="badge critical">严重</span>
+      <span class="badge fixed">已修复</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-section">
+        <div class="bug-section-label">文件</div>
+        <span class="bug-file">src/components/Preview.tsx</span>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">问题描述</div>
+        <p>Preview 组件使用 <code>lastSyncSource</code> ref 跟踪同步来源，但该 ref 在独立的 <code>useEffect</code> 中更新，该 effect 在 content effect <strong>之后</strong>执行。当用户在预览区编辑时，<code>syncSource</code> 和 <code>content</code> 在同一次渲染中同时变化，但 content effect 先执行，此时 <code>lastSyncSource.current</code> 仍然是旧值（非 'preview'），导致预览区重新渲染——将用户的富文本编辑替换为 markdown 往返转换的结果，造成光标跳动和内容丢失。</p>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">修复方案</div>
+        <p>移除 <code>lastSyncSource</code> ref 及其独立 useEffect，改为在 content useEffect 的依赖数组中直接包含 <code>syncSource</code> prop，在 effect 内部直接检查 <code>syncSource === 'preview'</code>。这样在同一次渲染中，content effect 能看到最新的 syncSource 值。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bug-card">
+    <div class="bug-header">
+      <span class="bug-id">#02</span>
+      <span class="bug-title">撤销/重做在可视化模式下不更新预览</span>
+      <span class="badge critical">严重</span>
+      <span class="badge fixed">已修复</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-section">
+        <div class="bug-section-label">文件</div>
+        <span class="bug-file">src/App.tsx — handleUndo / handleRedo</span>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">问题描述</div>
+        <p>当用户在预览区编辑后执行撤销/重做，<code>handleUndo</code>/<code>handleRedo</code> 更新了 <code>content</code> 但没有设置 <code>syncSource</code>。此时 Preview 的 <code>syncSource</code> prop 仍为 <code>'preview'</code>（来自上一次预览编辑），content effect 检测到 <code>syncSource === 'preview'</code> 后跳过了渲染，导致撤销/重做操作在预览区无效果。</p>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">修复方案</div>
+        <p>在 <code>handleUndo</code> 和 <code>handleRedo</code> 中，更新 content 之前设置 <code>syncSourceRef.current = 'editor'</code> 和 <code>setSyncSource('editor')</code>，确保 Preview 知道这次内容变更来自编辑器侧（而非预览编辑），从而正常重新渲染。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bug-card">
+    <div class="bug-header">
+      <span class="bug-id">#03</span>
+      <span class="bug-title">切换标签页清除撤销/重做历史</span>
+      <span class="badge critical">严重</span>
+      <span class="badge fixed">已修复</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-section">
+        <div class="bug-section-label">文件</div>
+        <span class="bug-file">src/App.tsx — handleTabClick / handleTabClose</span>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">问题描述</div>
+        <p><code>handleTabClick</code> 每次点击标签时都执行 <code>historyMapRef.current.set(tab.id, { stack: [tab.content], index: 0 })</code>，将历史栈重置为单条记录。这意味着用户在标签 A 做了 50 步编辑，切换到 B 再切回 A，所有撤销历史全部丢失。<code>handleTabClose</code> 也有同样问题——关闭标签时对新的活动标签重置历史。</p>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">修复方案</div>
+        <p><code>handleTabClick</code> 移除历史重置，仅调用 <code>updateHistoryFlags()</code>。<code>getHistory</code> 本身已有惰性初始化逻辑（找不到历史时自动创建），无需手动设置。<code>handleTabClose</code> 改为仅在历史不存在时才初始化。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bug-card">
+    <div class="bug-header">
+      <span class="bug-id">#04</span>
+      <span class="bug-title">自动保存永远不会触发</span>
+      <span class="badge critical">严重</span>
+      <span class="badge fixed">已修复</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-section">
+        <div class="bug-section-label">文件</div>
+        <span class="bug-file">src/App.tsx — auto-save useEffect</span>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">问题描述</div>
+        <p>自动保存的 <code>useEffect</code> 依赖数组包含 <code>tabs</code>，而 <code>tabs</code> 在每次按键时都会变化。每次 content 变化都会清除旧 interval 并创建新 interval，但新 interval 的等待时间（默认30秒）永远不会到期——因为用户在30秒内一定会再按键，interval 又被重建。结果：自动保存功能形同虚设。</p>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">修复方案</div>
+        <p>从依赖数组移除 <code>tabs</code>，引入 <code>tabsRef</code>（<code>const tabsRef = useRef(tabs); tabsRef.current = tabs</code>），interval 回调中读取 <code>tabsRef.current</code> 获取最新 tabs。这样 interval 只在设置变化时重建，定时器能正常到期。同时修复 <code>beforeunload</code> handler 也使用 <code>tabsRef</code> 并从依赖数组移除 <code>tabs</code>。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bug-card">
+    <div class="bug-header">
+      <span class="bug-id">#05</span>
+      <span class="bug-title">下划线语法 __text__ 与 GFM 加粗冲突</span>
+      <span class="badge critical">严重</span>
+      <span class="badge fixed">已修复</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-section">
+        <div class="bug-section-label">文件</div>
+        <span class="bug-file">src/App.tsx (underline action), src/utils/editorActions.ts, src/utils/markdown.ts</span>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">问题描述</div>
+        <p>源码模式下划线操作插入 <code>__text__</code>，但在 GFM 规范中 <code>__</code> 是加粗（<code>&lt;strong&gt;</code>）语法。marked 解析器会将 <code>__下划线文本__</code> 渲染为 <code>&lt;strong&gt;下划线文本&lt;/strong&gt;</code>，而非下划线。markdown.ts 的渲染管线也没有对 <code>__</code> 做下划线预处理，导致功能完全失效。</p>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">修复方案</div>
+        <p>源码模式改为插入 <code>&lt;u&gt;text&lt;/u&gt;</code> HTML 标签（Obsidian 兼容）。markdown.ts 新增预处理步骤：在 marked 解析前用正则提取 <code>&lt;u&gt;...&lt;/u&gt;</code>，替换为占位符，解析后恢复。htmlToMarkdown.ts 已有 Turndown 规则将 <code>&lt;u&gt;</code> 转回 <code>&lt;u&gt;text&lt;/u&gt;</code>，保持一致。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bug-card">
+    <div class="bug-header">
+      <span class="bug-id">#06</span>
+      <span class="bug-title">DOMPurify 禁止 input 标签导致任务列表复选框被移除</span>
+      <span class="badge critical">严重</span>
+      <span class="badge fixed">已修复</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-section">
+        <div class="bug-section-label">文件</div>
+        <span class="bug-file">src/utils/markdown.ts — DOMPurify.sanitize 配置</span>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">问题描述</div>
+        <p>DOMPurify 配置中 <code>FORBID_TAGS: ['script', 'iframe', 'form', 'input', ...]</code> 禁止了 <code>input</code> 标签。但 marked 的 GFM 任务列表渲染会生成 <code>&lt;input type="checkbox" disabled&gt;</code>，被 DOMPurify 直接移除，导致任务列表的复选框不显示。</p>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">修复方案</div>
+        <p>从 <code>FORBID_TAGS</code> 中移除 <code>'input'</code>。DOMPurify 默认允许 <code>input</code> 标签，且 <code>FORBID_ATTR</code> 已禁止 <code>onfocus</code>、<code>onchange</code> 等事件属性，安全性不受影响。</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>中等 Bug (Medium)</h2>
+
+  <div class="bug-card">
+    <div class="bug-header">
+      <span class="bug-id">#07</span>
+      <span class="bug-title">可视化模式下侧边栏大纲导航失效</span>
+      <span class="badge medium">中等</span>
+      <span class="badge fixed">已修复</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-section">
+        <div class="bug-section-label">文件</div>
+        <span class="bug-file">src/App.tsx — handleHeadingClick</span>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">问题描述</div>
+        <p><code>handleHeadingClick</code> 通过 <code>textareaRef.current</code> 操作 textarea 进行光标定位和滚动。在可视化模式下 textarea 不渲染，<code>textareaRef.current</code> 为 <code>null</code>，函数直接 return，侧边栏点击标题无任何反应。</p>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">修复方案</div>
+        <p>当 textarea 不存在时，改为在预览容器中查找对应的 heading DOM 元素（通过文本匹配），调用 <code>el.scrollIntoView({ behavior: 'smooth', block: 'start' })</code> 滚动到该标题。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bug-card">
+    <div class="bug-header">
+      <span class="bug-id">#08</span>
+      <span class="bug-title">可视化模式下右键菜单剪贴板操作失效</span>
+      <span class="badge medium">中等</span>
+      <span class="badge fixed">已修复</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-section">
+        <div class="bug-section-label">文件</div>
+        <span class="bug-file">src/App.tsx — contextMenuItems</span>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">问题描述</div>
+        <p>右键菜单的剪切/复制/粘贴项直接操作 <code>textareaRef.current</code>，在可视化模式下 textarea 不存在，操作直接 return。虽然加粗/斜体等项通过 <code>applyAction</code> 已支持可视化模式（走 <code>dispatchRtAction</code>），但剪贴板操作被遗漏。</p>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">修复方案</div>
+        <p>在每个剪贴板操作前检查 <code>isPreviewFocused()</code>，若是则使用 <code>document.execCommand('cut'/'copy')</code> 和 <code>document.execCommand('insertText', false, text)</code> 操作 contenteditable，否则走原有 textarea 逻辑。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bug-card">
+    <div class="bug-header">
+      <span class="bug-id">#09</span>
+      <span class="bug-title">可视化模式下搜索替换失效</span>
+      <span class="badge medium">中等</span>
+      <span class="badge fixed">已修复</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-section">
+        <div class="bug-section-label">文件</div>
+        <span class="bug-file">src/App.tsx — handleSearchNavigate / handleSearchReplace / handleSearchReplaceAll</span>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">问题描述</div>
+        <p>三个搜索函数都依赖 <code>textareaRef.current</code> 进行光标定位和文本替换。可视化模式下 textarea 不存在，搜索面板可以显示匹配结果但无法导航到匹配位置或执行替换。</p>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">修复方案</div>
+        <p><code>handleSearchNavigate</code>：textarea 不存在时按 content 比例滚动预览容器。<code>handleSearchReplace</code>：直接在 content 字符串上执行替换，设置 <code>syncSource='editor'</code> 触发预览更新。<code>handleSearchReplaceAll</code>：同样直接操作 content 字符串。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bug-card">
+    <div class="bug-header">
+      <span class="bug-id">#10</span>
+      <span class="bug-title">可视化模式下图片粘贴失效</span>
+      <span class="badge medium">中等</span>
+      <span class="badge fixed">已修复</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-section">
+        <div class="bug-section-label">文件</div>
+        <span class="bug-file">src/App.tsx — handlePasteImage</span>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">问题描述</div>
+        <p><code>handlePasteImage</code> 开头 <code>if (!ta) return</code>，可视化模式下 textarea 不存在时直接返回，粘贴图片无任何效果。注意：此函数仅在 Editor 组件的 <code>onPasteImage</code> 回调中使用，而 Editor 在可视化模式下不渲染，所以粘贴图片事件根本不会触发——但修复后即使从其他途径调用也能正常工作。</p>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">修复方案</div>
+        <p>textarea 不存在时，将图片 markdown 追加到 content 末尾，设置 <code>syncSource='editor'</code> 触发预览渲染。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bug-card">
+    <div class="bug-header">
+      <span class="bug-id">#11</span>
+      <span class="bug-title">删除线快捷键提示错误</span>
+      <span class="badge medium">中等</span>
+      <span class="badge fixed">已修复</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-section">
+        <div class="bug-section-label">文件</div>
+        <span class="bug-file">src/components/Toolbar.tsx</span>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">问题描述</div>
+        <p>工具栏删除线按钮的 Tooltip 显示快捷键为 <code>Ctrl+Shift+S</code>，但该快捷键实际绑定的是"另存为"（<code>handleSaveAs</code>）。用户按 Ctrl+Shift+S 期望加删除线，实际触发了另存为对话框。</p>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">修复方案</div>
+        <p>移除 Tooltip 中的错误快捷键提示。删除线目前无快捷键绑定，用户通过工具栏按钮操作。</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>轻微问题 (Minor)</h2>
+
+  <div class="bug-card">
+    <div class="bug-header">
+      <span class="bug-id">#12</span>
+      <span class="bug-title">Mermaid 图表不适配暗色模式</span>
+      <span class="badge minor">轻微</span>
+      <span class="badge fixed">已修复</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-section">
+        <div class="bug-section-label">文件</div>
+        <span class="bug-file">src/components/Preview.tsx</span>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">问题描述</div>
+        <p>Mermaid 初始化时 theme 硬编码为 <code>'default'</code>（浅色），切换到暗色模式后图表背景仍然为白色，与深色背景不协调。且初始化只执行一次，切换主题后不会重新渲染。</p>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">修复方案</div>
+        <p>初始化时读取 <code>document.documentElement.classList.contains('dark')</code> 设置 theme。添加 <code>MutationObserver</code> 监听 <code>&lt;html&gt;</code> 的 class 变化，主题切换时重新初始化 Mermaid 并清除已渲染的 SVG 触发重渲染。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bug-card">
+    <div class="bug-header">
+      <span class="bug-id">#13</span>
+      <span class="bug-title">已移除的 'preview' 模式仍存在于类型和渲染逻辑中</span>
+      <span class="badge minor">轻微</span>
+      <span class="badge fixed">已修复</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-section">
+        <div class="bug-section-label">文件</div>
+        <span class="bug-file">src/types.ts, src/App.tsx</span>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">问题描述</div>
+        <p><code>DisplayMode</code> 类型仍包含 <code>'preview'</code>，UI 工具栏已移除预览按钮但渲染逻辑仍检查 <code>displayMode === 'preview'</code>。如果 localStorage 中的 <code>defaultDisplayMode</code> 为 <code>'preview'</code>，应用会进入只读预览模式且无 UI 按钮可切换（虽然 Ctrl+E/Ctrl+R 快捷键仍可用）。</p>
+      </div>
+      <div class="bug-section">
+        <div class="bug-section-label">修复方案</div>
+        <p>在 <code>displayMode</code> 的 useState 初始化中添加规范化：<code>return s.defaultDisplayMode === 'preview' ? 'visual' : s.defaultDisplayMode</code>，将遗留的 'preview' 设置自动转换为 'visual'。</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>已验证正常的检查项</h2>
+  <ul class="check-list">
+    <li><span class="check-icon ok">&#10003;</span> <strong>双向同步防循环</strong>：isInternalUpdate ref + syncSource 标记 + 500ms 防抖三层机制（修复时序后）正常工作</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>占位符机制</strong>：MDPHX{n}MDPHX 格式无 markdown 特殊字符，不会被 marked 误解析</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>KaTeX/Mermaid/Callout 反向转换</strong>：htmlToMarkdown.ts 的预处理占位方案完整，data-md-src 属性正确携带原始 markdown</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>DOMPurify 安全配置</strong>：FORBID_ATTR 禁止所有事件属性，ADD_ATTR 白名单控制自定义属性</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>富文本操作 dispatchRtAction</strong>：30+ 操作完整映射，execCommand 后正确触发 input 事件</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>工具栏 preventBlur</strong>：所有按钮使用 onMouseDown={preventBlur} 防止 contenteditable 失焦</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>Emoji 选择器</strong>：8 分类 + 搜索栏 + 导航栏，替代随机插入</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>SettingsPanel hooks 顺序</strong>：所有 hooks 在 if(!visible)return null 之前，无条件执行</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>键盘快捷键 stateRef</strong>：避免闭包过期，stateRef.current 在每次渲染时同步</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>Editor 智能列表续行</strong>：无序列表/有序列表/任务列表的 Enter 键续行逻辑正确</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>Editor 自动配对括号</strong>：()[]{}`"'" 配对和跳过逻辑正确</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>颜色 span 的 Turndown 规则</strong>：保留 outerHTML，Obsidian 兼容</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>多标签独立历史栈</strong>：historyMapRef 按 tabId 隔离（修复重置问题后）</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>导出功能</strong>：MD/HTML/PDF 三种导出路径正确</li>
+    <li><span class="check-icon ok">&#10003;</span> <strong>ErrorBoundary</strong>：已包裹 App，捕获渲染错误</li>
+  </ul>
+
+  <h2>修改文件清单</h2>
+  <ul class="check-list">
+    <li><span class="check-icon ok">&#10003;</span> <code>src/components/Preview.tsx</code> — 修复同步时序 + Mermaid 暗色模式</li>
+    <li><span class="check-icon ok">&#10003;</span> <code>src/App.tsx</code> — 修复 undo/redo 同步、tab 历史、自动保存、可视化模式导航/搜索/粘贴/右键菜单、下划线语法、preview 模式规范化</li>
+    <li><span class="check-icon ok">&#10003;</span> <code>src/utils/markdown.ts</code> — 移除 input 禁止 + 添加下划线预处理</li>
+    <li><span class="check-icon ok">&#10003;</span> <code>src/components/Toolbar.tsx</code> — 修复删除线快捷键提示</li>
+  </ul>
+
+  <div class="footer">
+    MarkDesk 代码审查报告 | 13 个问题全部修复 | TypeScript 编译通过 | Vite 构建通过 | 2026-07-31
+  </div>
+</div>
+</body>
+</html>

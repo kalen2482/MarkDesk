@@ -1,0 +1,43 @@
+{
+  "name": "markdesk",
+  "private": true,
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "dist": "vite build && electron-builder --win --config electron-builder.yml",
+    "dist:win": "vite build && electron-builder --win nsis --config electron-builder.yml"
+  },
+  "dependencies": {
+    "@types/katex": "^0.16.8",
+    "dompurify": "^3.0.9",
+    "highlight.js": "^11.9.0",
+    "katex": "^0.18.1",
+    "marked": "^12.0.0",
+    "marked-gfm-heading-id": "^3.2.0",
+    "marked-highlight": "^2.1.0",
+    "mermaid": "^11.16.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2"
+  },
+  "devDependencies": {
+    "@types/dompurify": "^3.0.5",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/turndown": "^5.0.6",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.6",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4"
+  }
+}

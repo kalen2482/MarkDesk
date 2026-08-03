@@ -1,0 +1,422 @@
+/* Markdown preview content styles - Notion-inspired */
+
+.md-preview {
+  font-family: 'Inter', -apple-system, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: rgba(0, 0, 0, 0.95);
+  word-wrap: break-word;
+}
+
+.dark .md-preview {
+  color: #d4d4d4;
+}
+
+.md-preview h1,
+.md-preview h2,
+.md-preview h3,
+.md-preview h4,
+.md-preview h5,
+.md-preview h6 {
+  font-weight: 700;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+  line-height: 1.25;
+}
+
+.md-preview h1 {
+  font-size: 2em;
+  letter-spacing: -0.02em;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  padding-bottom: 0.3em;
+  margin-top: 0;
+}
+
+.dark .md-preview h1 {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.md-preview h2 {
+  font-size: 1.5em;
+  letter-spacing: -0.01em;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding-bottom: 0.3em;
+}
+
+.dark .md-preview h2 {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+.md-preview h3 { font-size: 1.25em; }
+.md-preview h4 { font-size: 1em; }
+.md-preview h5 { font-size: 0.875em; color: #615d59; }
+.md-preview h6 { font-size: 0.85em; color: #a39e98; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.md-preview p {
+  margin: 0 0 1em;
+}
+
+.md-preview a {
+  color: #0075de;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.md-preview a:hover {
+  text-decoration: underline;
+}
+
+.md-preview strong {
+  font-weight: 700;
+}
+
+.md-preview em {
+  font-style: italic;
+}
+
+.md-preview del {
+  text-decoration: line-through;
+  color: #a39e98;
+}
+
+.md-preview code {
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 0.875em;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+}
+
+.dark .md-preview code {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.md-preview pre {
+  background: #f6f5f4;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 0 0 1em;
+  position: relative;
+}
+
+.dark .md-preview pre {
+  background: #1a1a1a;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.md-preview pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.md-preview blockquote {
+  border-left: 3px solid #0075de;
+  padding: 0 0 0 16px;
+  margin: 0 0 1em;
+  color: #615d59;
+}
+
+.dark .md-preview blockquote {
+  color: #8c8c8c;
+  border-left-color: #4a90d9;
+}
+
+.md-preview ul,
+.md-preview ol {
+  margin: 0 0 1em;
+  padding-left: 1.5em;
+}
+
+.md-preview li {
+  margin: 0.25em 0;
+}
+
+.md-preview li > input[type="checkbox"] {
+  margin-right: 0.5em;
+  accent-color: #0075de;
+}
+
+.md-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0 0 1em;
+  font-size: 14px;
+}
+
+.md-preview th,
+.md-preview td {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.dark .md-preview th,
+.dark .md-preview td {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.md-preview th {
+  background: #f6f5f4;
+  font-weight: 600;
+}
+
+.dark .md-preview th {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.md-preview tr:nth-child(even) td {
+  background: rgba(0, 0, 0, 0.015);
+}
+
+.dark .md-preview tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.md-preview hr {
+  border: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  margin: 2em 0;
+}
+
+.dark .md-preview hr {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+.md-preview img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.md-preview mark {
+  background: rgba(255, 213, 0, 0.4);
+  padding: 0.1em 0.2em;
+  border-radius: 2px;
+}
+
+/* ── Mermaid diagrams ── */
+.mermaid-diagram {
+  margin: 1.5em 0;
+  text-align: center;
+}
+.mermaid-placeholder {
+  padding: 2em;
+  border: 2px dashed rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  color: #a39e98;
+  font-size: 14px;
+}
+.dark .mermaid-placeholder {
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #8c8c8c;
+}
+.mermaid-error {
+  padding: 1em;
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.08);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+/* ── Callouts ── */
+.callout {
+  margin: 1em 0;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border-left: 4px solid;
+  background: rgba(0, 0, 0, 0.02);
+}
+.dark .callout {
+  background: rgba(255, 255, 255, 0.03);
+}
+.callout-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.callout-content {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.callout-content > p:last-child {
+  margin-bottom: 0;
+}
+.callout-info {
+  border-left-color: #0075de;
+  background: rgba(0, 117, 222, 0.06);
+}
+.callout-info .callout-title { color: #0075de; }
+.callout-warning {
+  border-left-color: #f5a623;
+  background: rgba(245, 166, 35, 0.06);
+}
+.callout-warning .callout-title { color: #d4920c; }
+.callout-tip {
+  border-left-color: #27ae60;
+  background: rgba(39, 174, 96, 0.06);
+}
+.callout-tip .callout-title { color: #27ae60; }
+.callout-note {
+  border-left-color: #9b59b6;
+  background: rgba(155, 89, 182, 0.06);
+}
+.callout-note .callout-title { color: #9b59b6; }
+.callout-danger {
+  border-left-color: #e74c3c;
+  background: rgba(231, 76, 60, 0.06);
+}
+.callout-danger .callout-title { color: #e74c3c; }
+
+/* ── Table of Contents ── */
+.md-toc {
+  margin: 1.5em 0;
+  padding: 16px 20px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+.dark .md-toc {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+.toc-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: rgba(0, 0, 0, 0.7);
+}
+.dark .toc-title {
+  color: rgba(255, 255, 255, 0.7);
+}
+.toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.toc-list li {
+  margin: 4px 0;
+  font-size: 14px;
+}
+.toc-list a {
+  color: #0075de;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.toc-list a:hover {
+  text-decoration: underline;
+}
+
+/* ── Footnotes ── */
+.footnotes {
+  margin-top: 2em;
+  padding-top: 1em;
+  font-size: 14px;
+  color: #615d59;
+}
+.dark .footnotes {
+  color: #8c8c8c;
+}
+.footnotes hr {
+  margin-bottom: 1em;
+}
+.footnotes ol {
+  padding-left: 1.5em;
+  margin: 0;
+}
+.footnotes li {
+  margin: 0.5em 0;
+}
+.footnote-ref {
+  font-size: 0.85em;
+  vertical-align: super;
+  line-height: 0;
+}
+.footnote-ref a {
+  color: #0075de;
+  text-decoration: none;
+}
+
+/* ── Underline (marked native __text__) ── */
+.md-preview u {
+  text-decoration: underline;
+  text-decoration-color: rgba(0, 0, 0, 0.3);
+  text-underline-offset: 2px;
+}
+.dark .md-preview u {
+  text-decoration-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ── KaTeX overrides ── */
+.md-preview .katex {
+  font-size: 1.05em;
+}
+.md-preview .katex-display {
+  margin: 1.5em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* ── Contenteditable preview styles ── */
+.contenteditable-preview {
+  outline: none;
+  cursor: text;
+}
+.contenteditable-preview:focus {
+  outline: none;
+}
+
+/* Make elements in editable preview look interactive */
+.contenteditable-preview h1,
+.contenteditable-preview h2,
+.contenteditable-preview h3,
+.contenteditable-preview h4,
+.contenteditable-preview h5,
+.contenteditable-preview h6 {
+  cursor: text;
+}
+
+/* Protect special blocks from being directly edited */
+.contenteditable-preview .mermaid-diagram,
+.contenteditable-preview .katex-block,
+.contenteditable-preview .md-toc-wrapper {
+  cursor: default;
+  position: relative;
+}
+.contenteditable-preview .mermaid-diagram:hover::after,
+.contenteditable-preview .katex-block:hover::after,
+.contenteditable-preview .md-toc-wrapper:hover::after {
+  content: '（受保护元素，请在源码模式编辑）';
+  position: absolute;
+  top: -20px;
+  left: 0;
+  font-size: 11px;
+  color: #999;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Callout editable area */
+.contenteditable-preview .callout-content {
+  cursor: text;
+}
+
+/* Visual placeholder for empty editable area */
+.contenteditable-preview:empty::before {
+  content: '开始编辑...';
+  color: #ccc;
+  pointer-events: none;
+}
+
+/* Ensure code blocks in editable mode are readable */
+.contenteditable-preview pre {
+  cursor: text;
+}
+.contenteditable-preview pre code {
+  white-space: pre-wrap;
+}

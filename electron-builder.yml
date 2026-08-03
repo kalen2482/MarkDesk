@@ -1,0 +1,29 @@
+appId: com.apple.markdesk
+productName: MarkDesk
+copyright: Copyright © 2026 Apple
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+win:
+  target: nsis
+  icon: build/icon.ico
+  # 如需自定义图标，在 build/ 下放 icon.ico 并取消下一行注释
+  # icon: build/icon.ico
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+fileAssociations:
+  - ext:
+      - md
+      - markdown
+      - mdx
+    name: Markdown 文档
+    role: Editor
+    description: MarkDesk Markdown 文档
