@@ -43,6 +43,16 @@ const uiText: Record<string, Partial<Record<AppLanguage, string>>> = {
   '自动换行': { en: 'Word wrap', ja: '折り返し', ko: '자동 줄바꿈', fr: 'Retour à la ligne', de: 'Zeilenumbruch', es: 'Ajuste de línea' },
   '显示行号': { en: 'Show line numbers', ja: '行番号を表示', ko: '줄 번호 표시', fr: 'Afficher les numéros', de: 'Zeilennummern anzeigen', es: 'Mostrar números de línea' },
   '滚动同步': { en: 'Sync scrolling', ja: 'スクロール同期', ko: '스크롤 동기화', fr: 'Synchroniser le défilement', de: 'Scrollen synchronisieren', es: 'Sincronizar desplazamiento' },
+  '默认打开模式': { en: 'Default view', ja: '既定の表示モード', ko: '기본 보기', fr: "Vue par défaut", de: 'Standardansicht', es: 'Vista predeterminada' },
+  '启动时默认显示的编辑模式': { en: 'The editing view shown when MarkDesk starts', ja: '起動時に表示する編集モード', ko: 'MarkDesk 시작 시 표시할 편집 보기', fr: 'Vue affichée au démarrage de MarkDesk', de: 'Beim Start angezeigte Bearbeitungsansicht', es: 'Vista mostrada al iniciar MarkDesk' },
+  'Tab 宽度': { en: 'Tab width', ja: 'タブ幅', ko: '탭 너비', fr: 'Largeur de tabulation', de: 'Tabulatorbreite', es: 'Ancho de tabulación' },
+  '空格': { en: 'spaces', ja: 'スペース', ko: '공백', fr: 'espaces', de: 'Leerzeichen', es: 'espacios' },
+  '长行自动折行显示': { en: 'Wrap long lines automatically', ja: '長い行を自動で折り返す', ko: '긴 줄 자동 줄바꿈', fr: 'Retourner automatiquement les longues lignes', de: 'Lange Zeilen automatisch umbrechen', es: 'Ajustar líneas largas automáticamente' },
+  '编辑器左侧显示行号': { en: 'Show line numbers beside the editor', ja: 'エディター横に行番号を表示', ko: '편집기 옆에 줄 번호 표시', fr: "Afficher les numéros de ligne dans l'éditeur", de: 'Zeilennummern neben dem Editor anzeigen', es: 'Mostrar números de línea junto al editor' },
+  '拼写检查': { en: 'Spell check', ja: 'スペルチェック', ko: '맞춤법 검사', fr: 'Vérification orthographique', de: 'Rechtschreibprüfung', es: 'Corrector ortográfico' },
+  '启用浏览器拼写检查': { en: 'Use the browser spell checker', ja: 'ブラウザーのスペルチェックを使用', ko: '브라우저 맞춤법 검사 사용', fr: 'Utiliser le correcteur du navigateur', de: 'Rechtschreibprüfung des Browsers verwenden', es: 'Usar el corrector del navegador' },
+  '编辑器与预览区域滚动联动': { en: 'Keep editor and preview scrolling together', ja: 'エディターとプレビューのスクロールを同期', ko: '편집기와 미리 보기 스크롤 동기화', fr: "Synchroniser le défilement de l'éditeur et de l'aperçu", de: 'Editor und Vorschau gemeinsam scrollen', es: 'Sincronizar el desplazamiento del editor y la vista previa' },
+  '正文': { en: 'Paragraph', ja: '本文', ko: '본문', fr: 'Paragraphe', de: 'Absatz', es: 'Párrafo' },
 }
 
 const protectedSelector = 'textarea, input, pre, code, .markdown-preview, .contenteditable-preview, .preview-content'
