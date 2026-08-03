@@ -125,7 +125,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const headingLabels = ['正文', '标题 1', '标题 2', '标题 3', '标题 4', '标题 5', '标题 6']
 
   return (
-    <div className="flex items-center h-11 px-2 bg-white dark:bg-dark-bg border-b border-whisper-border dark:border-dark-border flex-shrink-0 gap-0.5 overflow-visible" role="toolbar" aria-label="格式化工具栏">
+    <div className="flex items-center h-11 px-2 bg-white dark:bg-dark-bg border-b border-whisper-border dark:border-dark-border flex-shrink-0 gap-0.5 overflow-x-auto overflow-y-hidden whitespace-nowrap" role="toolbar" aria-label="格式化工具栏">
       {/* Undo/Redo */}
       <Tooltip label="撤销" shortcut="Ctrl+Z">
         <button className="tb-btn" onMouseDown={preventBlur} onClick={onUndo} disabled={!canUndo} aria-label="撤销">

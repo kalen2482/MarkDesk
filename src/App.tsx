@@ -19,9 +19,11 @@ declare global {
       platform: string
       notifyReady: () => void
       minimizeWindow: () => void
+      toggleMaximizeWindow: () => void
       closeWindow: () => void
       onFileOpen: (cb: (file: { path: string; content: string }) => void) => void
       openFileDialog: () => Promise<{ path: string; content: string } | null>
+      openImageDialog: (markdownFilePath?: string) => Promise<{ path: string; markdownPath: string } | null>
       saveFile: (filePath: string, content: string) => Promise<{ success: boolean; path?: string; error?: string }>
       saveFileAs: (defaultName: string, content: string) => Promise<{ path: string } | null>
     }
@@ -57,8 +59,6 @@ const DEFAULT_SETTINGS: Settings = {
   fontSize: 14,
   tabSize: 2,
   wordWrap: false,
-  autoSave: true,
-  autoSaveInterval: 30,
   syncScroll: true,
   lineNumbers: true,
   spellCheck: false,
@@ -222,27 +222,12 @@ export default function App() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const editorScrollSource = useRef<'editor' | 'preview' | null>(null)
   const suppressScrollSync = useRef(false)
-  const autoSaveTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const stateRef = useRef({ zenMode: false, searchVisible: false, sidebarVisible: true, displayMode: 'split' as DisplayMode, syncSource: null as ('editor' | 'preview' | null) })
 
 
-  // ── Auto-save to localStorage ──
-  useEffect(() => {
-    if (autoSaveTimer.current) clearInterval(autoSaveTimer.current)
-    if (settings.autoSave) {
-      autoSaveTimer.current = setInterval(() => {
-        localStorage.setItem('markdesk-autosave', JSON.stringify(tabsRef.current))
-      }, settings.autoSaveInterval * 1000)
-    }
-    return () => {
-      if (autoSaveTimer.current) clearInterval(autoSaveTimer.current)
-    }
-  }, [settings.autoSave, settings.autoSaveInterval])
-
-  // Save on unload
+  // Persist UI preferences only; documents are saved explicitly by the user.
   useEffect(() => {
     const handler = () => {
-      localStorage.setItem('markdesk-autosave', JSON.stringify(tabsRef.current))
       localStorage.setItem('markdesk-theme', theme)
       localStorage.setItem('markdesk-recent', JSON.stringify(recentFiles))
     }
@@ -250,22 +235,10 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handler)
   }, [theme, recentFiles])
 
-  // ── Restore from auto-save on mount ──
+  // Remove drafts written by older versions. Closed or unsaved tabs must not
+  // reappear after the application is restarted.
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('markdesk-autosave')
-      if (saved) {
-        const savedTabs = JSON.parse(saved) as FileTab[]
-        if (savedTabs.length > 0 && savedTabs[0].content) {
-          setTabs(savedTabs.map((t) => ({ ...t, isDirty: false })))
-          setActiveTabId(savedTabs[0].id)
-          // Sync history
-          historyMapRef.current.set(savedTabs[0].id, { stack: [savedTabs[0].content], index: 0 })
-        }
-      }
-    } catch {
-      // ignore
-    }
+    localStorage.removeItem('markdesk-autosave')
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Derived data ──
@@ -412,6 +385,27 @@ export default function App() {
 
   // ── Editor actions ──
   const applyAction = useCallback((action: string, value?: string) => {
+    if (action === 'image' && window.electronAPI) {
+      const ta = textareaRef.current
+      const selectedText = ta ? ta.value.slice(ta.selectionStart, ta.selectionEnd) : ''
+      window.electronAPI.openImageDialog(activeTab.filePath).then((image) => {
+        if (!image) return
+        const insertion = `![${selectedText || '图片描述'}](${image.markdownPath})`
+        if (ta) {
+          const start = ta.selectionStart
+          const next = ta.value.slice(0, start) + insertion + ta.value.slice(ta.selectionEnd)
+          handleContentChange(next)
+          requestAnimationFrame(() => {
+            ta.focus()
+            ta.selectionStart = ta.selectionEnd = start + insertion.length
+          })
+        } else {
+          handleContentChange(`${content.trimEnd()}\n\n${insertion}\n`)
+        }
+      })
+      return
+    }
+
     // ── Rich text mode: if preview is focused (visual/split mode), use execCommand ──
     if (isPreviewFocused()) {
       const handled = dispatchRtAction(action, value)
@@ -641,7 +635,7 @@ export default function App() {
         setTimeout(() => { suppressScrollSync.current = false }, 50)
       })
     }
-  }, [pushHistory, updateActiveTab])
+  }, [activeTab.filePath, content, handleContentChange, pushHistory, updateActiveTab])
 
   // ── Tab operations ──
   const handleNewTab = useCallback(() => {
@@ -653,21 +647,20 @@ export default function App() {
   }, [updateHistoryFlags])
 
   const handleTabClose = useCallback((id: string) => {
-    setTabs((prev) => {
-      if (prev.length <= 1) return prev
-      const idx = prev.findIndex((t) => t.id === id)
-      const newTabs = prev.filter((t) => t.id !== id)
-      if (id === activeTabId) {
-        const newActive = newTabs[Math.min(idx, newTabs.length - 1)]
-        setActiveTabId(newActive.id)
-        // Preserve existing history; only init if not present
-        if (!historyMapRef.current.has(newActive.id)) {
-          historyMapRef.current.set(newActive.id, { stack: [newActive.content], index: 0 })
-        }
-        updateHistoryFlags()
+    const currentTabs = tabsRef.current
+    if (currentTabs.length <= 1) return
+    const idx = currentTabs.findIndex((t) => t.id === id)
+    const newTabs = currentTabs.filter((t) => t.id !== id)
+    tabsRef.current = newTabs
+    setTabs(newTabs)
+    if (id === activeTabId) {
+      const newActive = newTabs[Math.min(idx, newTabs.length - 1)]
+      setActiveTabId(newActive.id)
+      if (!historyMapRef.current.has(newActive.id)) {
+        historyMapRef.current.set(newActive.id, { stack: [newActive.content], index: 0 })
       }
-      return newTabs
-    })
+      updateHistoryFlags()
+    }
   }, [activeTabId, updateHistoryFlags])
 
   const handleTabClick = useCallback((id: string) => {
@@ -1161,6 +1154,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
             <div className="h-full overflow-hidden" style={{ width: displayMode === 'split' ? `${(1 - splitRatio) * 100}%` : '100%' }}>
               <Preview
                 content={content}
+                sourcePath={activeTab.filePath}
                 scrollSync={scrollSync}
                 onScroll={handlePreviewScroll}
                 settings={settings}
@@ -1310,6 +1304,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
             <div className={displayMode === 'split' ? 'flex-1 overflow-hidden' : 'w-full h-full overflow-hidden'}>
               <Preview
                 content={content}
+                sourcePath={activeTab.filePath}
                 scrollSync={scrollSync}
                 onScroll={handlePreviewScroll}
                 settings={settings}

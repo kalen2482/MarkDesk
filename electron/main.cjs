@@ -109,6 +109,11 @@ ipcMain.on('app:ready', () => {
 })
 
 ipcMain.on('window:minimize', () => mainWindow?.minimize())
+ipcMain.on('window:toggleMaximize', () => {
+  if (!mainWindow) return
+  if (mainWindow.isMaximized()) mainWindow.unmaximize()
+  else mainWindow.maximize()
+})
 ipcMain.on('window:close', () => mainWindow?.close())
 
 ipcMain.handle('dialog:openFile', async () => {
@@ -119,6 +124,20 @@ ipcMain.handle('dialog:openFile', async () => {
   })
   if (result.canceled || result.filePaths.length === 0) return null
   return readMdFile(result.filePaths[0])
+})
+
+ipcMain.handle('dialog:openImage', async (_event, markdownFilePath) => {
+  if (!mainWindow) return null
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'] }],
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  const imagePath = result.filePaths[0]
+  const markdownPath = markdownFilePath
+    ? path.relative(path.dirname(markdownFilePath), imagePath).split(path.sep).join('/')
+    : imagePath
+  return { path: imagePath, markdownPath }
 })
 
 ipcMain.handle('file:save', async (_event, filePath, content) => {

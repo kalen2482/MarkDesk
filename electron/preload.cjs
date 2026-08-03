@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Tell the main process the renderer is mounted and ready to receive files.
   notifyReady: () => ipcRenderer.send('app:ready'),
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
+  toggleMaximizeWindow: () => ipcRenderer.send('window:toggleMaximize'),
   closeWindow: () => ipcRenderer.send('window:close'),
 
   // Subscribe to OS "open with" / file-association events.
@@ -18,6 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Native open-file dialog → returns { path, content } | null
   openFileDialog: () => ipcRenderer.invoke('dialog:openFile'),
+  openImageDialog: (markdownFilePath) => ipcRenderer.invoke('dialog:openImage', markdownFilePath),
 
   // Save content to a known path → { success, path?, error? }
   saveFile: (filePath, content) => ipcRenderer.invoke('file:save', filePath, content),

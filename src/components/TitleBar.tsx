@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { MenuIcon, SunIcon, MoonIcon, PanelLeftIcon, ClockIcon, FocusIcon } from './Icons'
+import { MenuIcon, SunIcon, MoonIcon, PanelLeftIcon, FocusIcon } from './Icons'
 import type { ThemeMode } from '../types'
 
 interface TitleBarProps {
@@ -167,13 +167,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         </div>
       </div>
 
-      {/* Right: auto-save status + theme toggle */}
+      {/* Right: window and theme controls */}
       <div className="flex items-center gap-1">
-        <div className="flex items-center gap-1 text-xs text-warm-gray-300 px-2">
-          <ClockIcon size={12} />
-          <span>已自动保存</span>
-        </div>
-        <div className="w-px h-5 bg-whisper-border dark:bg-dark-border mx-1" />
         <button
           aria-label="专注模式"
           className="flex items-center justify-center w-8 h-8 rounded-notion hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-near-black dark:text-dark-text"
@@ -197,6 +192,14 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           title="最小化"
         >
           <span className="mb-1 text-lg leading-none">−</span>
+        </button>
+        <button
+          aria-label="最大化或还原窗口"
+          className="flex items-center justify-center w-8 h-8 rounded-none hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-near-black dark:text-dark-text"
+          onClick={() => window.electronAPI?.toggleMaximizeWindow()}
+          title="最大化或还原"
+        >
+          <span className="text-base leading-none">□</span>
         </button>
         <button
           aria-label="关闭窗口"

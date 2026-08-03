@@ -35,8 +35,6 @@ export interface Settings {
   fontSize: number
   tabSize: number
   wordWrap: boolean
-  autoSave: boolean
-  autoSaveInterval: number // seconds
   syncScroll: boolean
   lineNumbers: boolean
   spellCheck: boolean

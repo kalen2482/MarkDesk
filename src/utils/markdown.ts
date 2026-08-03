@@ -54,13 +54,28 @@ const ph = () => `MDPHX${++_phCounter}MDPHX`
  * 2. marked parse
  * 3. Post-process: replace placeholders
  */
-export function renderMarkdown(content: string): string {
+export function renderMarkdown(content: string, sourcePath?: string): string {
   resetPh()
   const placeholders: Map<string, string> = new Map()
 
+  const imageSources: string[] = []
+  let sourceImageIndex = 0
+  const processedImagePaths = sourcePath
+    ? content.replace(/!\[([^\]]*)\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g, (match, alt, url) => {
+        if (/^(?:[a-z][a-z\d+.-]*:|#|\/\/)/i.test(url)) return match
+        imageSources.push(url)
+        const directory = sourcePath.replace(/[\\/][^\\/]*$/, '')
+        const absolutePath = /^[a-z]:[\\/]/i.test(url)
+          ? url
+          : `${directory}\\${url.replace(/^\.?[\\/]/, '')}`
+        const fileUrl = `file:///${absolutePath.replace(/\\/g, '/')}`
+        return `![${alt}](${encodeURI(fileUrl)})`
+      })
+    : content
+
   // ── 1. Footnotes: collect definitions & references ──
   const footnotes: Map<string, string> = new Map()
-  let processed = content.replace(/^\[(\^\w+)\]:\s*(.+)$/gm, (_match, id, text) => {
+  let processed = processedImagePaths.replace(/^\[(\^\w+)\]:\s*(.+)$/gm, (_match, id, text) => {
     footnotes.set(id, text)
     return ''
   })
@@ -134,6 +149,14 @@ export function renderMarkdown(content: string): string {
   // ── 6. Parse with marked ──
   let html = marked.parse(processed, { async: false }) as string
 
+  // Keep the original local path so visual editing round-trips back to the
+  // Markdown source rather than persisting an absolute file:// URL.
+  html = html.replace(/<img\b([^>]*?)>/g, (tag) => {
+    if (!/src="file:\/\//i.test(tag)) return tag
+    const original = imageSources[sourceImageIndex++]
+    return original ? tag.replace(/\s*\/?>(\s*)$/, ` data-md-src="${encodeURIComponent(original)}">$1`) : tag
+  })
+
   // Preserve the source line for every heading. DOM order can diverge from
   // Markdown order when extensions (for example callouts) contain headings.
   const headingLines = extractHeadings(content)
@@ -161,6 +184,7 @@ export function renderMarkdown(content: string): string {
     ADD_TAGS: ['mark', 'div', 'sup', 'span'],
     FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onmouseenter', 'onmouseleave', 'onfocus', 'onblur', 'onchange', 'onsubmit'],
     FORBID_TAGS: ['script', 'iframe', 'form', 'textarea', 'button', 'object', 'embed'],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|file):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
   })
 }
 

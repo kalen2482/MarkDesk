@@ -23,6 +23,16 @@ const turndown = new TurndownService({
 
 turndown.use(gfm)
 
+turndown.addRule('local-image', {
+  filter: (node) => node.nodeName === 'IMG' && (node as HTMLElement).hasAttribute('data-md-src'),
+  replacement: (_content, node) => {
+    const image = node as HTMLImageElement
+    const original = image.getAttribute('data-md-src')
+    const src = original ? decodeURIComponent(original) : image.getAttribute('src') || ''
+    return `![${image.alt || ''}](${src})`
+  },
+})
+
 // ── Custom rules for extended syntax ──
 
 // KaTeX block: extract original $$...$$ from data-md-src

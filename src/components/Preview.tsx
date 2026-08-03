@@ -17,6 +17,8 @@ interface PreviewProps {
   onHtmlChange?: (markdown: string) => void
   /** Source of the current sync update, to prevent loops */
   syncSource?: 'editor' | 'preview' | null
+  /** Absolute path of the open Markdown document, for resolving local images. */
+  sourcePath?: string
 }
 
 export const Preview: React.FC<PreviewProps> = ({
@@ -28,6 +30,7 @@ export const Preview: React.FC<PreviewProps> = ({
   editable = false,
   onHtmlChange,
   syncSource,
+  sourcePath,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
@@ -35,6 +38,7 @@ export const Preview: React.FC<PreviewProps> = ({
   const isInternalUpdate = useRef(false)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isDark, setIsDark] = useState(false)
+  const selectedImageRef = useRef<HTMLImageElement | null>(null)
 
   // ── Mermaid init ──
   useEffect(() => {
@@ -80,12 +84,12 @@ export const Preview: React.FC<PreviewProps> = ({
     }
 
     isInternalUpdate.current = true
-    const html = renderMarkdown(content)
+    const html = renderMarkdown(content, sourcePath)
     setRenderedHtml(html)
     requestAnimationFrame(() => {
       isInternalUpdate.current = false
     })
-  }, [content, syncSource])
+  }, [content, sourcePath, syncSource])
 
   // ── Render mermaid diagrams after HTML is mounted ──
   useEffect(() => {
@@ -138,8 +142,15 @@ export const Preview: React.FC<PreviewProps> = ({
   }
 
   const handleClick = useCallback((e: React.MouseEvent) => {
-    if (!onHeadingClick) return
     const target = e.target as HTMLElement
+    const image = target.closest('img') as HTMLImageElement | null
+    if (editable && image) {
+      selectedImageRef.current?.classList.remove('md-image-selected')
+      selectedImageRef.current = image
+      image.classList.add('md-image-selected')
+      return
+    }
+    if (!onHeadingClick) return
     const heading = target.closest('h1, h2, h3, h4, h5, h6')
     if (heading) {
       const dataLine = heading.getAttribute('data-line')
@@ -157,7 +168,7 @@ export const Preview: React.FC<PreviewProps> = ({
         }
       }
     }
-  }, [content, onHeadingClick])
+  }, [content, editable, onHeadingClick])
 
   // ── Handle contenteditable input (debounced) ──
   const handleInput = useCallback(() => {
@@ -190,6 +201,14 @@ export const Preview: React.FC<PreviewProps> = ({
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!editable) return
 
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedImageRef.current) {
+      e.preventDefault()
+      selectedImageRef.current.remove()
+      selectedImageRef.current = null
+      handleInput()
+      return
+    }
+
     // Enter: handle list/blockquote continuation
     if (e.key === 'Enter' && !e.shiftKey) {
       const sel = window.getSelection()
@@ -217,7 +236,7 @@ export const Preview: React.FC<PreviewProps> = ({
         }
       }
     }
-  }, [editable])
+  }, [editable, handleInput])
 
   return (
     <div

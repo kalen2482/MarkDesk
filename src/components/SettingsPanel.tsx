@@ -161,26 +161,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ visible, settings,
             />
           </Section>
 
-          <Section title="保存">
-            <ToggleRow
-              label="自动保存"
-              desc="定时保存到浏览器本地存储"
-              value={local.autoSave}
-              onChange={(v) => update('autoSave', v)}
-            />
-            {local.autoSave && (
-              <SliderRow
-                label="自动保存间隔"
-                value={local.autoSaveInterval}
-                min={5}
-                max={120}
-                step={5}
-                unit="秒"
-                onChange={(v) => update('autoSaveInterval', v)}
-              />
-            )}
-          </Section>
-
           <Section title="预览">
             <ToggleRow
               label="滚动同步"

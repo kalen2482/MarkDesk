@@ -191,6 +191,11 @@
   border-radius: 8px;
 }
 
+.contenteditable-preview img.md-image-selected {
+  outline: 2px solid #3d72d9;
+  outline-offset: 3px;
+}
+
 .md-preview mark {
   background: rgba(255, 213, 0, 0.4);
   padding: 0.1em 0.2em;
