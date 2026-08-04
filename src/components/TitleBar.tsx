@@ -15,6 +15,7 @@ interface TitleBarProps {
   onExportMD: () => void
   onExportHTML: () => void
   onExportPDF: () => void
+  onExportBackup: () => void
   onZenMode: () => void
 }
 
@@ -38,6 +39,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onExportMD,
   onExportHTML,
   onExportPDF,
+  onExportBackup,
   onZenMode,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -121,6 +123,14 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                       onClick={() => { onExportMD(); setMenuOpen(false); setExportOpen(false) }}
                     >
                       Markdown (.md)
+                    </button>
+                    <button
+                      role="menuitem"
+                      className="flex items-center w-full px-3 py-1.5 text-sm text-near-black dark:text-dark-text hover:bg-warm-white dark:hover:bg-white/5 transition-colors"
+                      onMouseDown={preventBlur}
+                      onClick={() => { onExportBackup(); setMenuOpen(false); setExportOpen(false) }}
+                    >
+                      Backup (.markdesk-backup.json)
                     </button>
                     <button
                       role="menuitem"

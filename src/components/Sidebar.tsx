@@ -144,6 +144,8 @@ const FilePanel: React.FC<{
   onOpenRecent: (file: RecentFile) => void
   onClearRecent: () => void
 }> = ({ fileName, recentFiles, onOpenRecent, onClearRecent }) => {
+  const [sort, setSort] = useState<'recent' | 'name'>('recent')
+  const sortedRecentFiles = [...recentFiles].sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name) : b.time - a.time)
   return (
     <div className="space-y-3">
       {/* Current file */}
@@ -159,6 +161,11 @@ const FilePanel: React.FC<{
       </div>
 
       {/* Recent files */}
+      <div className="flex justify-end px-3">
+        <select value={sort} onChange={(e) => setSort(e.target.value as 'recent' | 'name')} className="bg-transparent text-[10px] text-warm-gray-300 outline-none" aria-label="文件排序">
+          <option value="recent">最近打开</option><option value="name">按名称</option>
+        </select>
+      </div>
       <div>
         <div className="flex items-center justify-between px-3 py-1">
           <span className="text-xs font-medium text-warm-gray-300 uppercase tracking-wide">最近打开</span>
@@ -179,7 +186,7 @@ const FilePanel: React.FC<{
           </div>
         ) : (
           <div className="space-y-0.5" role="list" aria-label="最近打开的文件">
-            {recentFiles.map((file, i) => (
+            {sortedRecentFiles.map((file, i) => (
               <div
                 key={i}
                 className="sidebar-item"

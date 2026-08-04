@@ -6,6 +6,8 @@ const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
 let mainWindow = null
 let pendingFile = null
 let rendererReady = false
+let allowWindowClose = false
+let closeRequestPending = false
 
 // Ensure only one instance runs; additional "open with" requests are
 // forwarded to the existing window (Windows / Linux).
@@ -39,6 +41,18 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null
+    allowWindowClose = false
+    closeRequestPending = false
+  })
+
+  // Keep OS close, Alt+F4, and the custom close button on the same safe path.
+  mainWindow.on('close', (event) => {
+    if (allowWindowClose) return
+    event.preventDefault()
+    if (!closeRequestPending) {
+      closeRequestPending = true
+      mainWindow.webContents.send('app:close-requested')
+    }
   })
 }
 
@@ -115,6 +129,12 @@ ipcMain.on('window:toggleMaximize', () => {
   else mainWindow.maximize()
 })
 ipcMain.on('window:close', () => mainWindow?.close())
+ipcMain.on('app:confirm-close', () => {
+  if (!mainWindow) return
+  allowWindowClose = true
+  closeRequestPending = false
+  mainWindow.close()
+})
 
 ipcMain.handle('dialog:openFile', async () => {
   if (!mainWindow) return null
@@ -134,10 +154,10 @@ ipcMain.handle('dialog:openImage', async (_event, markdownFilePath) => {
   })
   if (result.canceled || result.filePaths.length === 0) return null
   const imagePath = result.filePaths[0]
-  const markdownPath = markdownFilePath
-    ? path.relative(path.dirname(markdownFilePath), imagePath).split(path.sep).join('/')
-    : imagePath
-  return { path: imagePath, markdownPath }
+  const extension = path.extname(imagePath).slice(1).toLowerCase()
+  const mime = ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp' })[extension] || 'application/octet-stream'
+  const dataUrl = `data:${mime};base64,${fs.readFileSync(imagePath).toString('base64')}`
+  return { path: imagePath, markdownPath: dataUrl }
 })
 
 ipcMain.handle('file:save', async (_event, filePath, content) => {

@@ -35,6 +35,7 @@ export interface FileTab {
 
 export interface Settings {
   fontSize: number
+  fontFamily: string
   tabSize: number
   wordWrap: boolean
   syncScroll: boolean

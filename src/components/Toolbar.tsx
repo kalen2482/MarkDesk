@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import {
   UndoIcon, RedoIcon, BoldIcon, ItalicIcon, StrikethroughIcon, UnderlineIcon, CodeIcon,
   HeadingIcon, ListIcon, OrderedListIcon, CheckListIcon, QuoteIcon,
@@ -10,6 +10,41 @@ import {
 } from './Icons'
 import { EmojiPicker } from './EmojiPicker'
 import type { DisplayMode } from '../types'
+import { useI18n } from '../i18n'
+
+const toolbarTranslations: Record<string, Partial<Record<string, string>>> = {
+  '撤销': { en: 'Undo', ja: '元に戻す', ko: '실행 취소', fr: 'Annuler', de: 'Rückgängig', es: 'Deshacer' },
+  '重做': { en: 'Redo', ja: 'やり直す', ko: '다시 실행', fr: 'Rétablir', de: 'Wiederholen', es: 'Rehacer' },
+  '加粗': { en: 'Bold', ja: '太字', ko: '굵게', fr: 'Gras', de: 'Fett', es: 'Negrita' },
+  '斜体': { en: 'Italic', ja: '斜体', ko: '기울임꼴', fr: 'Italique', de: 'Kursiv', es: 'Cursiva' },
+  '有序列表': { en: 'Ordered list', ja: '番号付きリスト', ko: '번호 매기기 목록', fr: 'Liste ordonnée', de: 'Nummerierte Liste', es: 'Lista ordenada' },
+  '无序列表': { en: 'Bulleted list', ja: '箇条書き', ko: '글머리 기호 목록', fr: 'Liste à puces', de: 'Aufzählung', es: 'Lista con viñetas' },
+  '任务列表': { en: 'Task list', ja: 'タスクリスト', ko: '작업 목록', fr: 'Liste de tâches', de: 'Aufgabenliste', es: 'Lista de tareas' },
+  '超链接': { en: 'Link', ja: 'リンク', ko: '링크', fr: 'Lien', de: 'Link', es: 'Enlace' },
+  '图片': { en: 'Image', ja: '画像', ko: '이미지', fr: 'Image', de: 'Bild', es: 'Imagen' },
+  '表格': { en: 'Table', ja: '表', ko: '표', fr: 'Tableau', de: 'Tabelle', es: 'Tabla' },
+  '插入': { en: 'Insert', ja: '挿入', ko: '삽입', fr: 'Insérer', de: 'Einfügen', es: 'Insertar' },
+  '搜索': { en: 'Search', ja: '検索', ko: '검색', fr: 'Rechercher', de: 'Suchen', es: 'Buscar' },
+  '设置': { en: 'Settings', ja: '設定', ko: '설정', fr: 'Paramètres', de: 'Einstellungen', es: 'Ajustes' },
+  '正文': { en: 'Paragraph', ja: '本文', ko: '본문', fr: 'Paragraphe', de: 'Absatz', es: 'Párrafo' },
+  '标题 1': { en: 'Heading 1', ja: '見出し 1', ko: '제목 1', fr: 'Titre 1', de: 'Überschrift 1', es: 'Título 1' },
+  '标题 2': { en: 'Heading 2', ja: '見出し 2', ko: '제목 2', fr: 'Titre 2', de: 'Überschrift 2', es: 'Título 2' },
+  '标题 3': { en: 'Heading 3', ja: '見出し 3', ko: '제목 3', fr: 'Titre 3', de: 'Überschrift 3', es: 'Título 3' },
+  '标题 4': { en: 'Heading 4', ja: '見出し 4', ko: '제목 4', fr: 'Titre 4', de: 'Überschrift 4', es: 'Título 4' },
+  '标题 5': { en: 'Heading 5', ja: '見出し 5', ko: '제목 5', fr: 'Titre 5', de: 'Überschrift 5', es: 'Título 5' },
+  '标题 6': { en: 'Heading 6', ja: '見出し 6', ko: '제목 6', fr: 'Titre 6', de: 'Überschrift 6', es: 'Título 6' },
+  '增加缩进': { en: 'Increase indent', ja: 'インデントを増やす', ko: '들여쓰기 늘리기', fr: 'Augmenter le retrait', de: 'Einzug vergrößern', es: 'Aumentar sangría' },
+  '减少缩进': { en: 'Decrease indent', ja: 'インデントを減らす', ko: '들여쓰기 줄이기', fr: 'Réduire le retrait', de: 'Einzug verkleinern', es: 'Reducir sangría' },
+  '删除线': { en: 'Strikethrough', ja: '取り消し線', ko: '취소선', fr: 'Barré', de: 'Durchgestrichen', es: 'Tachado' },
+  '下划线': { en: 'Underline', ja: '下線', ko: '밑줄', fr: 'Souligné', de: 'Unterstrichen', es: 'Subrayado' },
+  '行内代码': { en: 'Inline code', ja: 'インラインコード', ko: '인라인 코드', fr: 'Code en ligne', de: 'Inline-Code', es: 'Código en línea' },
+  '公式': { en: 'Formula', ja: '数式', ko: '수식', fr: 'Formule', de: 'Formel', es: 'Fórmula' },
+  '引用块': { en: 'Quote block', ja: '引用', ko: '인용 블록', fr: 'Citation', de: 'Zitatblock', es: 'Cita' },
+  '高亮标记': { en: 'Highlight', ja: 'ハイライト', ko: '강조 표시', fr: 'Surlignage', de: 'Hervorheben', es: 'Resaltar' },
+  '字体颜色': { en: 'Text color', ja: '文字色', ko: '글자 색', fr: 'Couleur du texte', de: 'Textfarbe', es: 'Color del texto' },
+  '背景颜色': { en: 'Background color', ja: '背景色', ko: '배경색', fr: 'Couleur d’arrière-plan', de: 'Hintergrundfarbe', es: 'Color de fondo' },
+  '字号': { en: 'Font size', ja: '文字サイズ', ko: '글꼴 크기', fr: 'Taille de police', de: 'Schriftgröße', es: 'Tamaño de fuente' },
+}
 
 const PRESET_COLORS = [
   '#e74c3c', '#e67e22', '#f1c40f', '#27ae60', '#0075de', '#9b59b6',
@@ -45,20 +80,23 @@ interface TooltipProps {
   shortcut?: string
   syntax?: string
   children: React.ReactNode
+  className?: string
 }
 
-const Tooltip: React.FC<TooltipProps> = ({ label, shortcut, syntax, children }) => {
+const Tooltip: React.FC<TooltipProps> = ({ label, shortcut, syntax, children, className }) => {
+  const { language } = useI18n()
+  const translatedLabel = toolbarTranslations[label]?.[language] || label
   const child = React.Children.only(children) as React.ReactElement<any>
   const cloned = React.cloneElement(child, {
-    'aria-label': label,
+    'aria-label': translatedLabel,
     title: [label, shortcut, syntax ? `Markdown: ${syntax}` : undefined].filter(Boolean).join(' · '),
   })
   return (
-    <div className="relative group/tb">
+    <div className={`relative group/tb ${className || ''}`}>
       {cloned}
       <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2.5 py-1.5 bg-warm-dark text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover/tb:opacity-100 transition-opacity pointer-events-none z-50 shadow-dropdown">
         <div className="font-medium">
-          {label}
+          {translatedLabel}
           {shortcut && <span className="ml-1.5 text-warm-gray-300 font-normal">{shortcut}</span>}
         </div>
         {syntax && (
@@ -90,6 +128,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onShortcutHelp,
   onAbout,
 }) => {
+  const { language } = useI18n()
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  const [density, setDensity] = useState<'full' | 'medium' | 'compact'>('full')
+  const [moreOpen, setMoreOpen] = useState(false)
   const [headingDropdown, setHeadingDropdown] = useState(false)
   const [insertPanel, setInsertPanel] = useState(false)
   const [colorPanel, setColorPanel] = useState<null | 'text' | 'bg'>(null)
@@ -100,6 +142,33 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const colorRef = useRef<HTMLDivElement>(null)
   const emojiRef = useRef<HTMLDivElement>(null)
   const fontSizeRef = useRef<HTMLDivElement>(null)
+
+  // Choose the least restrictive layout that fits the *actual* rendered controls.
+  // This intentionally measures scrollWidth/clientWidth instead of relying on screen breakpoints.
+  useLayoutEffect(() => {
+    const toolbar = toolbarRef.current
+    if (!toolbar) return
+    let frame = 0
+    const fit = () => {
+      cancelAnimationFrame(frame)
+      setDensity('full')
+      frame = requestAnimationFrame(() => {
+        if (!toolbarRef.current || toolbarRef.current.scrollWidth <= toolbarRef.current.clientWidth) return
+        setDensity('medium')
+        frame = requestAnimationFrame(() => {
+          if (toolbarRef.current && toolbarRef.current.scrollWidth > toolbarRef.current.clientWidth) setDensity('compact')
+        })
+      })
+    }
+    const observer = new ResizeObserver(fit)
+    observer.observe(toolbar)
+    fit()
+    return () => { cancelAnimationFrame(frame); observer.disconnect() }
+  }, [])
+
+  // Density drives the measured overflow decision; menu visibility is refined by
+  // CSS/layout in the next render without any screen-width breakpoint.
+  void density
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -123,10 +192,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const headingLabels = ['正文', '标题 1', '标题 2', '标题 3', '标题 4', '标题 5', '标题 6']
+  const headingKeys = ['正文', '标题 1', '标题 2', '标题 3', '标题 4', '标题 5', '标题 6']
+  const headingLabels = headingKeys.map((label) => toolbarTranslations[label]?.[language] || label)
 
   return (
-    <div className="flex items-center min-h-11 px-2 bg-white dark:bg-dark-bg border-b border-whisper-border dark:border-dark-border flex-shrink-0 gap-0.5 overflow-visible whitespace-nowrap" role="toolbar" aria-label="格式化工具栏">
+    <div ref={toolbarRef} className="flex items-center min-h-11 px-2 bg-white dark:bg-dark-bg border-b border-whisper-border dark:border-dark-border flex-shrink-0 gap-0.5 overflow-visible whitespace-nowrap" role="toolbar" aria-label="格式化工具栏">
       {/* Undo/Redo */}
       <Tooltip label="撤销" shortcut="Ctrl+Z">
         <button className="tb-btn" onMouseDown={preventBlur} onClick={onUndo} disabled={!canUndo} aria-label="撤销">
@@ -147,7 +217,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         <button
           className="flex items-center gap-1 h-8 px-2"
           onMouseDown={preventBlur}
-          onClick={() => { onAction('heading', '0'); setHeadingDropdown(false) }}
+          onClick={() => setHeadingDropdown(!headingDropdown)}
           aria-label="正文（普通段落）"
           title="正文（普通段落） · Ctrl+0"
         >
@@ -391,6 +461,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <ImageIcon size={16} />
         </button>
       </Tooltip>
+      <div className={density === 'full' ? 'contents' : 'hidden'}>
       <Tooltip label="表格" shortcut="Ctrl+Shift+T">
         <button className="tb-btn" onMouseDown={preventBlur} onClick={() => onAction('table')} aria-label="表格">
           <TableIcon size={16} />
@@ -409,6 +480,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       <div className="tb-divider" role="separator" aria-orientation="vertical" />
 
+      </div>
+      <div className={density === 'full' ? 'contents' : 'hidden'}>
       {/* Advanced insert buttons */}
       <Tooltip label="Mermaid 图表">
         <button className="tb-btn" onMouseDown={preventBlur} onClick={() => onAction('mermaid')} aria-label="Mermaid 图表">
@@ -446,6 +519,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         )}
       </div>
 
+      </div>
       {/* Insert panel - remaining less common items */}
       <div ref={insertRef} className="relative">
         <button
@@ -464,7 +538,22 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         )}
       </div>
 
-      <div className="flex-1" />
+      {density !== 'full' && (
+        <div className="relative flex-shrink-0">
+          <button
+            className="tb-btn px-2 text-lg leading-none"
+            onMouseDown={preventBlur}
+            onClick={() => setMoreOpen(!moreOpen)}
+            aria-label="More tools"
+            aria-haspopup="true"
+            aria-expanded={moreOpen}
+            title="More tools"
+          >•••</button>
+          {moreOpen && <MorePanel onAction={(action, value) => { onAction(action, value); setMoreOpen(false) }} />}
+        </div>
+      )}
+
+      <div className="flex-1 min-w-0" />
 
       {/* Search */}
       <Tooltip label="搜索" shortcut="Ctrl+F">
@@ -514,6 +603,34 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 interface InsertPanelProps {
   onAction: (action: string, value?: string) => void
 }
+
+/** Overflow menu used when the measured toolbar width is constrained. */
+const MorePanel: React.FC<InsertPanelProps> = ({ onAction }) => (
+  <div className="absolute top-full right-0 mt-1 bg-white dark:bg-dark-surface border border-whisper-border dark:border-dark-border rounded-notion-card shadow-notion-deep py-2 z-50 w-[230px] max-h-[420px] overflow-y-auto" role="menu" aria-label="More tools">
+    <InsertSection title="排版">
+      <InsertItem icon={<StrikethroughIcon size={14} />} label="删除线" onClick={() => onAction('strikethrough')} />
+      <InsertItem icon={<UnderlineIcon size={14} />} label="下划线" onClick={() => onAction('underline')} />
+      <InsertItem icon={<CodeIcon size={14} />} label="行内代码" onClick={() => onAction('code')} />
+      <InsertItem icon={<QuoteIcon size={14} />} label="引用块" onClick={() => onAction('quote')} />
+      <InsertItem icon={<CheckListIcon size={14} />} label="任务列表" onClick={() => onAction('task-list')} />
+      <InsertItem icon={<span className="text-base">🖌</span>} label="格式刷" onClick={() => onAction('format-painter')} />
+    </InsertSection>
+    <InsertDivider />
+    <InsertSection title="插入内容">
+      <InsertItem icon={<TableIcon size={14} />} label="表格" onClick={() => onAction('table')} />
+      <InsertItem icon={<CodeBlockIcon size={14} />} label="代码块" onClick={() => onAction('codeblock')} />
+      <InsertItem icon={<HrIcon size={14} />} label="分隔线" onClick={() => onAction('hr')} />
+      <InsertItem icon={<FormulaIcon size={14} />} label="公式" onClick={() => onAction('formula')} />
+    </InsertSection>
+    <InsertDivider />
+    <InsertSection title="高级格式">
+      <InsertItem icon={<MermaidIcon size={14} />} label="Mermaid 图表" onClick={() => onAction('mermaid')} />
+      <InsertItem icon={<CalloutIcon size={14} />} label="提示块" onClick={() => onAction('callout')} />
+      <InsertItem icon={<FootnoteIcon size={14} />} label="脚注" onClick={() => onAction('footnote')} />
+      <InsertItem icon={<TocIcon size={14} />} label="目录" onClick={() => onAction('toc')} />
+    </InsertSection>
+  </div>
+)
 
 const InsertPanel: React.FC<InsertPanelProps> = ({ onAction }) => {
   return (

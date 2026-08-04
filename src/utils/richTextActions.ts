@@ -24,6 +24,38 @@ export function isPreviewFocused(): boolean {
   return active.classList?.contains('md-preview') || active.closest('.md-preview') != null
 }
 
+/** Capture the visual-editor selection before a native dialog steals focus. */
+export function capturePreviewRange(): Range | null {
+  const selection = window.getSelection()
+  const preview = document.querySelector('.md-preview')
+  if (!selection || !preview || selection.rangeCount === 0) return null
+  const range = selection.getRangeAt(0)
+  return preview.contains(range.commonAncestorContainer) ? range.cloneRange() : null
+}
+
+/** Insert an image at a previously captured visual-editor range. */
+export function insertImageAtPreviewRange(range: Range, src: string, alt: string): boolean {
+  const preview = document.querySelector('.md-preview') as HTMLElement | null
+  if (!preview || !preview.contains(range.commonAncestorContainer)) return false
+
+  const image = document.createElement('img')
+  image.src = src
+  image.alt = alt
+  // Preserve data URLs when the preview is converted back into Markdown.
+  image.setAttribute('data-md-src', encodeURIComponent(src))
+
+  range.deleteContents()
+  range.insertNode(image)
+  range.setStartAfter(image)
+  range.collapse(true)
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(range)
+  preview.focus()
+  preview.dispatchEvent(new Event('input', { bubbles: true }))
+  return true
+}
+
 // Focus the preview and ensure a selection exists
 function ensureFocus(): boolean {
   const preview = document.querySelector('.md-preview') as HTMLElement | null

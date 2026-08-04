@@ -74,8 +74,13 @@ export function renderMarkdown(content: string, sourcePath?: string): string {
     : content
 
   // ── 1. Footnotes: collect definitions & references ──
+  const embeddedImageProcessed = processedImagePaths.replace(/!\[([^\]]*)\]\((data:image\/(?:png|jpeg|gif|webp|svg\+xml|bmp);base64,[A-Za-z0-9+/=]+)\)/gi, (_match, alt, dataUrl) => {
+    const key = ph()
+    placeholders.set(key, `<img src="${dataUrl}" alt="${String(alt).replace(/"/g, '&quot;')}">`)
+    return key
+  })
   const footnotes: Map<string, string> = new Map()
-  let processed = processedImagePaths.replace(/^\[(\^\w+)\]:\s*(.+)$/gm, (_match, id, text) => {
+  let processed = embeddedImageProcessed.replace(/^\[(\^\w+)\]:\s*(.+)$/gm, (_match, id, text) => {
     footnotes.set(id, text)
     return ''
   })
@@ -184,7 +189,7 @@ export function renderMarkdown(content: string, sourcePath?: string): string {
     ADD_TAGS: ['mark', 'div', 'sup', 'span'],
     FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onmouseenter', 'onmouseleave', 'onfocus', 'onblur', 'onchange', 'onsubmit'],
     FORBID_TAGS: ['script', 'iframe', 'form', 'textarea', 'button', 'object', 'embed'],
-    ALLOWED_URI_REGEXP: /^(?:(?:https?|file):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|file):|data:image\/(?:png|jpeg|gif|webp|svg\+xml|bmp);base64,|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
   })
 }
 

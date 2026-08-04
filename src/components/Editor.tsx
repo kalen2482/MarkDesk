@@ -326,7 +326,7 @@ export const Editor: React.FC<EditorProps> = ({
         style={{
           fontSize: `${settings.fontSize}px`,
           lineHeight: '1.6',
-          fontFamily: "'JetBrains Mono', 'Consolas', monospace",
+          fontFamily: settings.fontFamily,
           tabSize: settings.tabSize,
           whiteSpace: settings.wordWrap ? 'pre-wrap' : 'pre',
           wordBreak: settings.wordWrap ? 'break-all' : 'normal',

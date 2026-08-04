@@ -149,6 +149,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ visible, settings,
           </Section>
 
           {/* Editor section */}
+          <div className="flex items-center justify-between gap-4 py-2 px-0">
+            <div>
+              <div className="text-sm text-near-black dark:text-dark-text">字体</div>
+              <div className="text-xs text-warm-gray-300 mt-0.5">仅影响源码编辑器显示</div>
+            </div>
+            <select value={local.fontFamily} onChange={(e) => update('fontFamily', e.target.value)} className="max-w-[220px] rounded-notion border border-whisper-border bg-white px-2 py-1.5 text-sm text-near-black outline-none focus:border-notion-blue dark:border-dark-border dark:bg-dark-bg dark:text-dark-text" aria-label="字体">
+              <option value="'JetBrains Mono', 'Consolas', monospace">JetBrains Mono / Consolas</option>
+              <option value="'Cascadia Code', Consolas, monospace">Cascadia Code</option>
+              <option value="'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif">Microsoft YaHei</option>
+              <option value="'PingFang SC', 'Microsoft YaHei', sans-serif">PingFang SC</option>
+              <option value="'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif">Noto Sans CJK</option>
+              <option value="system-ui, sans-serif">System UI</option>
+            </select>
+          </div>
           <Section title="编辑器">
             <SliderRow
               label="字体大小"

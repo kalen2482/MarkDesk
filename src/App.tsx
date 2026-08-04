@@ -27,6 +27,8 @@ declare global {
       openImageDialog: (markdownFilePath?: string) => Promise<{ path: string; markdownPath: string } | null>
       saveFile: (filePath: string, content: string) => Promise<{ success: boolean; path?: string; error?: string }>
       saveFileAs: (defaultName: string, content: string) => Promise<{ path: string } | null>
+      onCloseRequested: (cb: () => void) => void
+      confirmClose: () => void
     }
   }
 }
@@ -53,11 +55,12 @@ import {
   applyTextColor,
   applyBgColor,
 } from './utils/editorActions'
-import { dispatchRtAction, isPreviewFocused } from './utils/richTextActions'
+import { capturePreviewRange, dispatchRtAction, insertImageAtPreviewRange, isPreviewFocused } from './utils/richTextActions'
 import type { AppLanguage, DisplayMode, ThemeMode, HeadingNode, SidebarTab, Settings, FileTab, RecentFile } from './types'
 
 const DEFAULT_SETTINGS: Settings = {
   fontSize: 14,
+  fontFamily: "'JetBrains Mono', 'Consolas', monospace",
   tabSize: 2,
   wordWrap: false,
   syncScroll: true,
@@ -75,6 +78,8 @@ export default function App() {
     { id: genTabId(), name: 'MarkDesk 示例文档.md', content: SAMPLE_CONTENT, isDirty: false },
   ])
   const [activeTabId, setActiveTabId] = useState(tabs[0].id)
+  const [closeConfirmVisible, setCloseConfirmVisible] = useState(false)
+  const [closeSaving, setCloseSaving] = useState(false)
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0]
   const content = activeTab.content
@@ -225,6 +230,8 @@ export default function App() {
 
   // ── Refs ──
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // Format painter keeps only Markdown delimiters; it never copies document content.
+  const formatPainterRef = useRef<{ prefix: string; suffix: string } | null>(null)
   const editorScrollSource = useRef<'editor' | 'preview' | null>(null)
   const suppressScrollSync = useRef(false)
   const stateRef = useRef({ zenMode: false, searchVisible: false, sidebarVisible: true, displayMode: 'split' as DisplayMode, syncSource: null as ('editor' | 'preview' | null) })
@@ -245,6 +252,45 @@ export default function App() {
   useEffect(() => {
     localStorage.removeItem('markdesk-autosave')
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The main process intercepts every desktop close request (including Alt+F4)
+  // and asks the renderer whether documents still need to be saved.
+  useEffect(() => {
+    const api = window.electronAPI
+    if (!api) return
+    api.onCloseRequested(() => {
+      if (tabsRef.current.some((tab) => tab.isDirty)) setCloseConfirmVisible(true)
+      else api.confirmClose()
+    })
+  }, [])
+
+  const saveAllAndClose = useCallback(async () => {
+    const api = window.electronAPI
+    if (!api) return
+    setCloseSaving(true)
+    const savedTabs = [...tabsRef.current]
+    for (let index = 0; index < savedTabs.length; index += 1) {
+      const tab = savedTabs[index]
+      if (!tab.isDirty) continue
+      if (tab.filePath) {
+        const result = await api.saveFile(tab.filePath, tab.content)
+        if (!result?.success) {
+          setCloseSaving(false)
+          return
+        }
+      } else {
+        const result = await api.saveFileAs(tab.name, tab.content)
+        if (!result?.path) {
+          setCloseSaving(false)
+          return
+        }
+        savedTabs[index] = { ...tab, name: fileNameFromPath(result.path), filePath: result.path }
+      }
+      savedTabs[index] = { ...savedTabs[index], isDirty: false }
+    }
+    setTabs(savedTabs)
+    api.confirmClose()
+  }, [])
 
   // ── Derived data ──
   const headings = React.useMemo(() => {
@@ -306,10 +352,13 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('markdesk-language', language)
     document.documentElement.lang = language
-    const timer = window.setTimeout(() => localizeApplicationUi(language), 0)
-    const observer = new MutationObserver(() => localizeApplicationUi(language))
-    observer.observe(document.body, { childList: true, subtree: true })
-    return () => { window.clearTimeout(timer); observer.disconnect() }
+      // Re-apply after React has committed the newly selected language.  A frame
+      // is important when switching back to Chinese: text nodes previously
+      // replaced by the DOM translator must first be restored from their source.
+      const frame = window.requestAnimationFrame(() => localizeApplicationUi(language))
+      const observer = new MutationObserver(() => localizeApplicationUi(language))
+      observer.observe(document.body, { childList: true, subtree: true })
+      return () => { window.cancelAnimationFrame(frame); observer.disconnect() }
   }, [language])
 
   // ── Content change handler (from textarea editor) ──
@@ -401,13 +450,24 @@ export default function App() {
   const applyAction = useCallback((action: string, value?: string) => {
     if (action === 'image' && window.electronAPI) {
       const ta = textareaRef.current
-      const selectedText = ta ? ta.value.slice(ta.selectionStart, ta.selectionEnd) : ''
+      // A toolbar click blurs the visual editor. Preserve its DOM range before
+      // the native dialog opens so insertion remains at the visible caret.
+      const previewRange = capturePreviewRange()
+      // The native file dialog steals focus and can reset textarea selection.
+      // Capture the exact range before opening it.
+      const insertionStart = ta?.selectionStart ?? 0
+      const insertionEnd = ta?.selectionEnd ?? insertionStart
+      const selectedText = previewRange?.toString() || (ta ? ta.value.slice(insertionStart, insertionEnd) : '')
       window.electronAPI.openImageDialog(activeTab.filePath).then((image) => {
         if (!image) return
         const insertion = `![${selectedText || '图片描述'}](${image.markdownPath})`
+        if (previewRange && insertImageAtPreviewRange(previewRange, image.markdownPath, selectedText || '图片描述')) {
+          return
+        }
         if (ta) {
-          const start = ta.selectionStart
-          const next = ta.value.slice(0, start) + insertion + ta.value.slice(ta.selectionEnd)
+          const start = Math.min(insertionStart, ta.value.length)
+          const end = Math.min(insertionEnd, ta.value.length)
+          const next = ta.value.slice(0, start) + insertion + ta.value.slice(end)
           handleContentChange(next)
           requestAnimationFrame(() => {
             ta.focus()
@@ -422,6 +482,8 @@ export default function App() {
 
     // Fallback for browser builds or a missing preload bridge: insert an embedded image.
     if (action === 'image' && !window.electronAPI?.openImageDialog) {
+      const savedStart = textareaRef.current?.selectionStart ?? 0
+      const savedEnd = textareaRef.current?.selectionEnd ?? savedStart
       const picker = document.createElement('input')
       picker.type = 'file'
       picker.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/bmp'
@@ -434,8 +496,9 @@ export default function App() {
           const alt = ta ? ta.value.slice(ta.selectionStart, ta.selectionEnd) || '图片描述' : '图片描述'
           const insertion = `![${alt}](${String(reader.result)})`
           if (ta) {
-            const start = ta.selectionStart
-            handleContentChange(ta.value.slice(0, start) + insertion + ta.value.slice(ta.selectionEnd))
+            const start = Math.min(savedStart, ta.value.length)
+            const end = Math.min(savedEnd, ta.value.length)
+            handleContentChange(ta.value.slice(0, start) + insertion + ta.value.slice(end))
             requestAnimationFrame(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = start + insertion.length })
           } else {
             handleContentChange(`${content.trimEnd()}\n\n${insertion}\n`)
@@ -461,6 +524,23 @@ export default function App() {
     const start = ta.selectionStart
     const end = ta.selectionEnd
     let result: { text: string; start: number; end: number } | null = null
+
+    if (action === 'format-painter') {
+      const selected = text.slice(start, end)
+      const candidates: Array<[RegExp, string]> = [[/^\*\*.+\*\*$/, '**'], [/^_.+_$/, '_'], [/^\*.+\*$/, '*'], [/^~~.+~~$/, '~~'], [/^`.+`$/, '`']]
+      const matched = candidates.find(([pattern]) => pattern.test(selected))
+      if (matched) {
+        formatPainterRef.current = { prefix: matched[1], suffix: matched[1] }
+        return
+      }
+      if (formatPainterRef.current && start !== end) {
+        const { prefix, suffix } = formatPainterRef.current
+        const insertion = `${prefix}${selected}${suffix}`
+        result = { text: text.slice(0, start) + insertion + text.slice(end), start: start + prefix.length, end: start + prefix.length + selected.length }
+        formatPainterRef.current = null
+      }
+      if (!result) return
+    }
 
     switch (action) {
       case 'bold': {
@@ -843,6 +923,19 @@ export default function App() {
   }, [content, activeTab.name, updateActiveTab])
 
   const handleExportMD = handleSave
+
+  const handleExportBackup = useCallback(() => {
+    // Images inserted by MarkDesk are already data URLs in `content`, so this
+    // single JSON file is a portable backup without external image references.
+    const backup = JSON.stringify({ format: 'markdesk-backup', version: 1, createdAt: new Date().toISOString(), name: activeTab.name, content, settings }, null, 2)
+    const blob = new Blob([backup], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = activeTab.name.replace(/\.md$/i, '') + '.markdesk-backup.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [activeTab.name, content, settings])
 
   const handleExportHTML = useCallback(() => {
     const html = renderMarkdown(content)
@@ -1231,7 +1324,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
   }
 
   return (
-    <I18nProvider language={language}><div className="flex flex-col h-screen bg-white dark:bg-dark-bg">
+    <I18nProvider key={language} language={language}><div className="flex flex-col h-screen bg-white dark:bg-dark-bg">
       {/* Title Bar */}
       <TitleBar
         fileName={activeTab.name}
@@ -1246,6 +1339,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         onExportMD={handleExportMD}
         onExportHTML={handleExportHTML}
         onExportPDF={handleExportPDF}
+        onExportBackup={handleExportBackup}
         onZenMode={() => setZenMode(true)}
       />
 
@@ -1392,6 +1486,19 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         onClose={() => setAboutVisible(false)}
         version={pkg.version}
       />
+      {closeConfirmVisible && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35" role="dialog" aria-modal="true" aria-labelledby="close-confirm-title">
+          <div className="w-[420px] rounded-xl bg-white p-6 shadow-2xl dark:bg-dark-panel">
+            <h2 id="close-confirm-title" className="text-lg font-semibold text-notion-text dark:text-dark-text">保存更改后退出？</h2>
+            <p className="mt-2 text-sm text-notion-text-secondary dark:text-dark-text-secondary">当前有未保存的文档。保存后退出可避免丢失修改。</p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button className="rounded-md px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/10" disabled={closeSaving} onClick={() => setCloseConfirmVisible(false)}>取消</button>
+              <button className="rounded-md px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/10" disabled={closeSaving} onClick={() => window.electronAPI?.confirmClose()}>不保存退出</button>
+              <button className="rounded-md bg-notion-blue px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:opacity-60" disabled={closeSaving} onClick={saveAllAndClose}>{closeSaving ? '正在保存…' : '保存并退出'}</button>
+            </div>
+          </div>
+        </div>
+      )}
       <ContextMenu
         visible={contextMenu.visible}
         x={contextMenu.x}

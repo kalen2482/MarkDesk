@@ -1,5 +1,6 @@
 appId: com.apple.markdesk
 productName: MarkDesk
+artifactName: "${productName}-${version}-win-x64-setup.${ext}"
 copyright: Copyright © 2026 Apple
 directories:
   output: release
