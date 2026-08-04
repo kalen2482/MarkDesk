@@ -23,7 +23,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/markdesk-preview.png" alt="MarkDesk visual editing interface" width="100%" />
+  <img src="docs/images/markdesk-split-view.png" alt="MarkDesk split editing interface" width="100%" />
+</p>
+
+<p align="center">
+  <img src="docs/images/markdesk-visual-view.png" alt="MarkDesk visual preview interface" width="100%" />
 </p>
 
 ## ✨ Why MarkDesk?

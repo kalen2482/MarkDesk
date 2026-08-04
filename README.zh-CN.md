@@ -23,7 +23,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/markdesk-preview.png" alt="MarkDesk 可视化编辑界面" width="100%" />
+  <img src="docs/images/markdesk-split-view.png" alt="MarkDesk 分栏编辑界面" width="100%" />
+</p>
+
+<p align="center">
+  <img src="docs/images/markdesk-visual-view.png" alt="MarkDesk 可视化预览界面" width="100%" />
 </p>
 
 ## ✨ 为什么选择 MarkDesk？
