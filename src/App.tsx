@@ -72,11 +72,22 @@ const DEFAULT_SETTINGS: Settings = {
 let tabIdCounter = 0
 const genTabId = () => `tab-${++tabIdCounter}`
 
+const createBlankStarterTab = (): FileTab => ({ id: genTabId(), name: 'Untitled.md', content: '', isDirty: false })
+const isUntouchedStarterTab = (tabs: FileTab[]) => tabs.length === 1
+  && !tabs[0].filePath
+  && !tabs[0].isDirty
+  && (tabs[0].content === SAMPLE_CONTENT || tabs[0].content === '')
+
 export default function App() {
   // ── Multi-tab state ──
-  const [tabs, setTabs] = useState<FileTab[]>([
-    { id: genTabId(), name: 'MarkDesk 示例文档.md', content: SAMPLE_CONTENT, isDirty: false },
-  ])
+  const [tabs, setTabs] = useState<FileTab[]>(() => {
+    // The sample is a welcome document, not a persisted session tab. Once a
+    // user closes it, start with a clean placeholder instead of restoring it.
+    if (localStorage.getItem('markdesk-sample-dismissed') === 'true') {
+      return [createBlankStarterTab()]
+    }
+    return [{ id: genTabId(), name: 'MarkDesk 示例文档.md', content: SAMPLE_CONTENT, isDirty: false }]
+  })
   const [activeTabId, setActiveTabId] = useState(tabs[0].id)
   const [closeConfirmVisible, setCloseConfirmVisible] = useState(false)
   const [closeSaving, setCloseSaving] = useState(false)
@@ -769,9 +780,23 @@ export default function App() {
 
   const handleTabClose = useCallback((id: string) => {
     const currentTabs = tabsRef.current
-    if (currentTabs.length <= 1) return
+    const closingTab = currentTabs.find((tab) => tab.id === id)
+    const isSample = Boolean(closingTab && !closingTab.filePath && closingTab.content === SAMPLE_CONTENT)
+    if (currentTabs.length <= 1) {
+      if (!isSample) return
+      localStorage.setItem('markdesk-sample-dismissed', 'true')
+      const blankTab = createBlankStarterTab()
+      tabsRef.current = [blankTab]
+      historyMapRef.current.delete(id)
+      historyMapRef.current.set(blankTab.id, { stack: [''], index: 0 })
+      setTabs([blankTab])
+      setActiveTabId(blankTab.id)
+      updateHistoryFlags()
+      return
+    }
     const idx = currentTabs.findIndex((t) => t.id === id)
     const newTabs = currentTabs.filter((t) => t.id !== id)
+    if (isSample) localStorage.setItem('markdesk-sample-dismissed', 'true')
     tabsRef.current = newTabs
     setTabs(newTabs)
     historyMapRef.current.delete(id)
@@ -1254,7 +1279,9 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
       }
       const newTab: FileTab = { id: genTabId(), name, content: file.content, isDirty: false, filePath: file.path }
       setTabs((prev) => {
-        const next = [...prev, newTab]
+        // A clean starter document is only a welcome placeholder. Opening a
+        // real file replaces it rather than leaving an unwanted sample tab.
+        const next = isUntouchedStarterTab(prev) ? [newTab] : [...prev, newTab]
         tabsRef.current = next
         return next
       })

@@ -11,7 +11,7 @@ export const SAMPLE_CONTENT = `# MarkDesk Markdown 语法示例
 ### 链接与图片
 
 - [MarkDesk 项目主页](https://github.com/kalen2482/MarkDesk)
-- 自动链接：https://example.com
+- 自动链接：https://github.com/kalen2482/MarkDesk
 - ![示例占位图](https://placehold.co/960x260/EEF4FF/2563EB?text=MarkDesk)
 
 ## 列表、引用与分隔线
