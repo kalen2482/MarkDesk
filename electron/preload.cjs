@@ -16,7 +16,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Subscribe to OS "open with" / file-association events.
   onFileOpen: (callback) => {
-    ipcRenderer.on('file:opened', (_event, file) => callback(file))
+    const listener = (_event, file) => callback(file)
+    ipcRenderer.on('file:opened', listener)
+    return () => ipcRenderer.removeListener('file:opened', listener)
   },
 
   // Native open-file dialog → returns { path, content } | null

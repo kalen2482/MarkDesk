@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { MenuIcon, SunIcon, MoonIcon, PanelLeftIcon, FocusIcon } from './Icons'
 import type { ThemeMode } from '../types'
+import { useI18n } from '../i18n'
 
 interface TitleBarProps {
   fileName: string
@@ -42,6 +43,16 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onExportBackup,
   onZenMode,
 }) => {
+  const { language } = useI18n()
+  const backupLabel: Record<string, string> = {
+    'zh-CN': '备份',
+    en: 'Backup',
+    ja: 'バックアップ',
+    ko: '백업',
+    fr: 'Sauvegarde',
+    de: 'Sicherung',
+    es: 'Copia de seguridad',
+  }
   const [menuOpen, setMenuOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -101,6 +112,16 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                 </React.Fragment>
               ))}
 
+              <button
+                role="menuitem"
+                className="flex items-center w-full px-3 py-1.5 text-sm text-near-black dark:text-dark-text hover:bg-warm-white dark:hover:bg-white/5 transition-colors"
+                onMouseDown={preventBlur}
+                onClick={() => { onExportBackup(); setMenuOpen(false); setExportOpen(false) }}
+              >
+                <span>{backupLabel[language] || backupLabel.en}</span>
+              </button>
+              <div role="separator" className="my-1 mx-3 h-px bg-whisper-border dark:bg-dark-border" />
+
               {/* Export submenu */}
               <div ref={exportRef} className="relative">
                 <button
@@ -123,14 +144,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                       onClick={() => { onExportMD(); setMenuOpen(false); setExportOpen(false) }}
                     >
                       Markdown (.md)
-                    </button>
-                    <button
-                      role="menuitem"
-                      className="flex items-center w-full px-3 py-1.5 text-sm text-near-black dark:text-dark-text hover:bg-warm-white dark:hover:bg-white/5 transition-colors"
-                      onMouseDown={preventBlur}
-                      onClick={() => { onExportBackup(); setMenuOpen(false); setExportOpen(false) }}
-                    >
-                      Backup (.markdesk-backup.json)
                     </button>
                     <button
                       role="menuitem"

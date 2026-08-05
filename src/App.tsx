@@ -22,7 +22,7 @@ declare global {
       minimizeWindow: () => void
       toggleMaximizeWindow: () => void
       closeWindow: () => void
-      onFileOpen: (cb: (file: { path: string; content: string }) => void) => void
+      onFileOpen: (cb: (file: { path: string; content: string }) => void) => () => void
       openFileDialog: () => Promise<{ path: string; content: string } | null>
       openImageDialog: (markdownFilePath?: string) => Promise<{ path: string; markdownPath: string } | null>
       saveFile: (filePath: string, content: string) => Promise<{ success: boolean; path?: string; error?: string }>
@@ -774,6 +774,7 @@ export default function App() {
     const newTabs = currentTabs.filter((t) => t.id !== id)
     tabsRef.current = newTabs
     setTabs(newTabs)
+    historyMapRef.current.delete(id)
     if (id === activeTabId) {
       const newActive = newTabs[Math.min(idx, newTabs.length - 1)]
       setActiveTabId(newActive.id)
@@ -1244,14 +1245,25 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
     api.notifyReady()
     const openFile = (file: { path: string; content: string }) => {
       const name = fileNameFromPath(file.path)
+      const existing = tabsRef.current.find((tab) => tab.filePath === file.path)
+      if (existing) {
+        setActiveTabId(existing.id)
+        updateHistoryFlags()
+        addRecentFile(name, file.path)
+        return
+      }
       const newTab: FileTab = { id: genTabId(), name, content: file.content, isDirty: false, filePath: file.path }
-      setTabs((prev) => [...prev, newTab])
+      setTabs((prev) => {
+        const next = [...prev, newTab]
+        tabsRef.current = next
+        return next
+      })
       setActiveTabId(newTab.id)
       historyMapRef.current.set(newTab.id, { stack: [file.content], index: 0 })
       updateHistoryFlags()
       addRecentFile(name, file.path)
     }
-    api.onFileOpen(openFile)
+    return api.onFileOpen(openFile)
   }, [updateHistoryFlags, addRecentFile])
 
   // ── Render ──
