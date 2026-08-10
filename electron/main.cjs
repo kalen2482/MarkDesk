@@ -146,6 +146,27 @@ ipcMain.handle('dialog:openFile', async () => {
   return readMdFile(result.filePaths[0])
 })
 
+ipcMain.handle('dialog:openBackup', async () => {
+  if (!mainWindow) return null
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'MarkDesk backup', extensions: ['json'] }],
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  try {
+    return { path: result.filePaths[0], content: fs.readFileSync(result.filePaths[0], 'utf-8') }
+  } catch (err) {
+    return { error: String(err) }
+  }
+})
+
+// Open a previously used Markdown file without showing the native picker.
+// Keep the extension check in the main process as the security boundary.
+ipcMain.handle('file:openRecent', async (_event, filePath) => {
+  if (typeof filePath !== 'string' || !/\.(md|markdown|mdx|txt)$/i.test(filePath)) return null
+  return readMdFile(filePath)
+})
+
 ipcMain.handle('dialog:openImage', async (_event, markdownFilePath) => {
   if (!mainWindow) return null
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -181,6 +202,6 @@ ipcMain.handle('dialog:saveAs', async (_event, defaultName, content) => {
     return { path: result.filePath }
   } catch (err) {
     console.error('Save-as failed:', err)
-    return null
+    return { error: String(err) }
   }
 })

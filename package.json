@@ -1,13 +1,14 @@
 {
   "name": "markdesk",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.4",
   "license": "Apache-2.0",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test": "node --test scripts/*.test.mjs",
     "preview": "vite preview",
     "dist": "vite build && electron-builder --win --config electron-builder.yml",
     "dist:win": "vite build && electron-builder --win nsis --config electron-builder.yml"
@@ -38,6 +39,7 @@
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.6",
     "typescript": "^5.5.3",
-    "vite": "^5.3.4"
+    "vite": "^5.3.4",
+    "vitest": "^4.1.10"
   }
 }

@@ -11,7 +11,7 @@ import { ContextMenu } from './components/ContextMenu'
 import { ShortcutHelp } from './components/ShortcutHelp'
 import { AboutModal } from './components/AboutModal'
 import pkg from '../package.json'
-import { I18nProvider, localizeApplicationUi } from './i18n'
+import { I18nProvider, localizeApplicationUi, tr } from './i18n'
 
 // ── Electron IPC type (only present when running inside the desktop app) ──
 declare global {
@@ -24,9 +24,11 @@ declare global {
       closeWindow: () => void
       onFileOpen: (cb: (file: { path: string; content: string }) => void) => () => void
       openFileDialog: () => Promise<{ path: string; content: string } | null>
+      openBackupDialog: () => Promise<{ path?: string; content?: string; error?: string } | null>
+      openRecentFile: (filePath: string) => Promise<{ path: string; content: string } | null>
       openImageDialog: (markdownFilePath?: string) => Promise<{ path: string; markdownPath: string } | null>
       saveFile: (filePath: string, content: string) => Promise<{ success: boolean; path?: string; error?: string }>
-      saveFileAs: (defaultName: string, content: string) => Promise<{ path: string } | null>
+      saveFileAs: (defaultName: string, content: string) => Promise<{ path?: string; error?: string } | null>
       onCloseRequested: (cb: () => void) => void
       confirmClose: () => void
     }
@@ -38,6 +40,7 @@ import { TabBar } from './components/TabBar'
 import { Resizer } from './components/Resizer'
 import type { ContextMenuItem } from './components/ContextMenu'
 import { extractHeadings, buildHeadingTree, countWords, renderMarkdown } from './utils/markdown'
+import { createBackup, parseBackup } from './utils/backup'
 
 import { SAMPLE_CONTENT } from './utils/sampleContent'
 import {
@@ -91,6 +94,7 @@ export default function App() {
   const [activeTabId, setActiveTabId] = useState(tabs[0].id)
   const [closeConfirmVisible, setCloseConfirmVisible] = useState(false)
   const [closeSaving, setCloseSaving] = useState(false)
+  const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0]
   const content = activeTab.content
@@ -235,6 +239,13 @@ export default function App() {
     }
   })
 
+  const noticeTimer = useRef<number | undefined>(undefined)
+  const showNotice = useCallback((kind: 'success' | 'error', text: string) => {
+    window.clearTimeout(noticeTimer.current)
+    setNotice({ kind, text })
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 4500)
+  }, [])
+
   useEffect(() => {
     localStorage.setItem('markdesk-settings', JSON.stringify(settings))
   }, [settings])
@@ -287,12 +298,14 @@ export default function App() {
         const result = await api.saveFile(tab.filePath, tab.content)
         if (!result?.success) {
           setCloseSaving(false)
+          showNotice('error', tr(language, 'saveFailed'))
           return
         }
       } else {
         const result = await api.saveFileAs(tab.name, tab.content)
         if (!result?.path) {
           setCloseSaving(false)
+          if (result?.error) showNotice('error', tr(language, 'saveFailed'))
           return
         }
         savedTabs[index] = { ...tab, name: fileNameFromPath(result.path), filePath: result.path }
@@ -301,7 +314,7 @@ export default function App() {
     }
     setTabs(savedTabs)
     api.confirmClose()
-  }, [])
+  }, [language, showNotice])
 
   // ── Derived data ──
   const headings = React.useMemo(() => {
@@ -910,6 +923,7 @@ export default function App() {
       // Desktop app with a known file path: write straight to disk
       api.saveFile(activeTab.filePath, content).then((res) => {
         if (res?.success) updateActiveTab((t) => ({ ...t, isDirty: false }))
+        else showNotice('error', tr(language, 'saveFailed'))
       })
       return
     }
@@ -922,16 +936,17 @@ export default function App() {
     a.click()
     URL.revokeObjectURL(url)
     updateActiveTab((t) => ({ ...t, isDirty: false }))
-  }, [content, activeTab.name, activeTab.filePath, updateActiveTab])
+  }, [content, activeTab.name, activeTab.filePath, updateActiveTab, language, showNotice])
 
   const handleSaveAs = useCallback(() => {
     const api = window.electronAPI
     if (api) {
       // Desktop app: native save-as dialog (writes the file)
       api.saveFileAs(activeTab.name, content).then((res) => {
-        if (res?.path) {
-          updateActiveTab((t) => ({ ...t, name: fileNameFromPath(res.path), filePath: res.path, isDirty: false }))
-        }
+        const savedPath = res?.path
+        if (savedPath) {
+          updateActiveTab((t) => ({ ...t, name: fileNameFromPath(savedPath), filePath: savedPath, isDirty: false }))
+        } else if (res?.error) showNotice('error', tr(language, 'saveFailed'))
       })
       return
     }
@@ -946,14 +961,14 @@ export default function App() {
     a.click()
     URL.revokeObjectURL(url)
     updateActiveTab((t) => ({ ...t, name: fileName.endsWith('.md') ? fileName : fileName + '.md', isDirty: false }))
-  }, [content, activeTab.name, updateActiveTab])
+  }, [content, activeTab.name, updateActiveTab, language, showNotice])
 
   const handleExportMD = handleSave
 
   const handleExportBackup = useCallback(() => {
     // Images inserted by MarkDesk are already data URLs in `content`, so this
     // single JSON file is a portable backup without external image references.
-    const backup = JSON.stringify({ format: 'markdesk-backup', version: 1, createdAt: new Date().toISOString(), name: activeTab.name, content, settings }, null, 2)
+    const backup = JSON.stringify(createBackup(activeTab.name, content, settings as unknown as Record<string, unknown>), null, 2)
     const blob = new Blob([backup], { type: 'application/json;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -962,6 +977,48 @@ export default function App() {
     a.click()
     URL.revokeObjectURL(url)
   }, [activeTab.name, content, settings])
+
+  const restoreBackupText = useCallback((text: string) => {
+    try {
+      const backup = parseBackup(text)
+      const restored: FileTab = { id: genTabId(), name: backup.name.endsWith('.md') ? backup.name : `${backup.name}.md`, content: backup.content, isDirty: true }
+      setTabs((previous) => {
+        const next = isUntouchedStarterTab(previous) ? [restored] : [...previous, restored]
+        tabsRef.current = next
+        return next
+      })
+      setActiveTabId(restored.id)
+      historyMapRef.current.set(restored.id, { stack: [restored.content], index: 0 })
+      if (backup.settings) setSettings((current) => ({ ...current, ...backup.settings } as Settings))
+      updateHistoryFlags()
+      showNotice('success', tr(language, 'backupRestored'))
+    } catch {
+      showNotice('error', tr(language, 'backupInvalid'))
+    }
+  }, [language, showNotice, updateHistoryFlags])
+
+  const handleImportBackup = useCallback(() => {
+    const api = window.electronAPI
+    if (api) {
+      api.openBackupDialog().then((file) => {
+        if (!file) return
+        if (!file.content) { showNotice('error', tr(language, 'backupInvalid')); return }
+        restoreBackupText(file.content)
+      })
+      return
+    }
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json,application/json'
+    input.onchange = (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = () => restoreBackupText(String(reader.result || ''))
+      reader.readAsText(file)
+    }
+    input.click()
+  }, [language, restoreBackupText, showNotice])
 
   const handleExportHTML = useCallback(() => {
     const html = renderMarkdown(content)
@@ -1119,9 +1176,38 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
   }, [pushHistory, updateActiveTab, content])
 
   // ── Recent files ──
-  const handleOpenRecent = useCallback((_file: RecentFile) => {
-    // For local file paths, we can't directly read them in browser
-    // Just trigger file picker
+  const handleOpenRecent = useCallback((recentFile: RecentFile) => {
+    const api = window.electronAPI
+    if (api) {
+      // Desktop app: reopen the recorded path directly, without prompting.
+      api.openRecentFile(recentFile.path).then((file) => {
+        if (!file) {
+          // The file may have been moved or removed since it was recorded.
+          setRecentFiles((prev) => prev.filter((item) => item.path !== recentFile.path))
+          showNotice('error', tr(language, 'recentMissing'))
+          return
+        }
+        const existing = tabsRef.current.find((tab) => tab.filePath === file.path)
+        if (existing) {
+          setActiveTabId(existing.id)
+          updateHistoryFlags()
+          return
+        }
+        const newTab: FileTab = { id: genTabId(), name: fileNameFromPath(file.path), content: file.content, isDirty: false, filePath: file.path }
+        setTabs((prev) => {
+          const next = isUntouchedStarterTab(prev) ? [newTab] : [...prev, newTab]
+          tabsRef.current = next
+          return next
+        })
+        setActiveTabId(newTab.id)
+        historyMapRef.current.set(newTab.id, { stack: [file.content], index: 0 })
+        updateHistoryFlags()
+        addRecentFile(newTab.name, file.path)
+      })
+      return
+    }
+    // Browser fallback: a browser cannot read an arbitrary local path, so let
+    // the user select the file again.
     const input = document.createElement('input')
     input.type = 'file'
     input.onchange = (e) => {
@@ -1139,7 +1225,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
       r.readAsText(f)
     }
     input.click()
-  }, [updateHistoryFlags])
+  }, [updateHistoryFlags, addRecentFile, language, showNotice])
 
   const handleClearRecent = useCallback(() => {
     setRecentFiles([])
@@ -1379,6 +1465,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         onExportHTML={handleExportHTML}
         onExportPDF={handleExportPDF}
         onExportBackup={handleExportBackup}
+        onImportBackup={handleImportBackup}
         onZenMode={() => setZenMode(true)}
       />
 
@@ -1545,6 +1632,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         items={contextMenuItems}
         onClose={() => setContextMenu({ visible: false, x: 0, y: 0 })}
       />
+      {notice && <div role="status" className={`fixed bottom-12 left-1/2 z-[110] -translate-x-1/2 rounded-lg px-4 py-2 text-sm shadow-lg ${notice.kind === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'}`}>{notice.text}</div>}
     </div></I18nProvider>
   )
 }

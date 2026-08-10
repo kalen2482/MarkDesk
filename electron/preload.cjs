@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Native open-file dialog → returns { path, content } | null
   openFileDialog: () => ipcRenderer.invoke('dialog:openFile'),
+  openBackupDialog: () => ipcRenderer.invoke('dialog:openBackup'),
+  openRecentFile: (filePath) => ipcRenderer.invoke('file:openRecent', filePath),
   openImageDialog: (markdownFilePath) => ipcRenderer.invoke('dialog:openImage', markdownFilePath),
 
   // Save content to a known path → { success, path?, error? }

@@ -15,6 +15,18 @@ const I18nContext = createContext<{ language: AppLanguage; t: (key: string) => s
 export const I18nProvider: React.FC<{ language: AppLanguage; children: React.ReactNode }> = ({ language, children }) => <I18nContext.Provider value={{ language, t: (key) => messages[language][key] || messages.en[key] || key }}>{children}</I18nContext.Provider>
 export const useI18n = () => useContext(I18nContext)
 
+const appCopy: Record<AppLanguage, Record<string, string>> = {
+  'zh-CN': { backup: '备份', restoreBackup: '恢复备份', exportAs: '导出为', saveFailed: '保存失败，请检查文件权限或路径。', recentMissing: '无法打开最近文件；该文件可能已移动或删除。', backupRestored: '备份已恢复，请另存为以保存文档。', backupInvalid: '无法恢复备份：文件格式无效。' },
+  en: { backup: 'Backup', restoreBackup: 'Restore backup', exportAs: 'Export as', saveFailed: 'Save failed. Check the file path and permissions.', recentMissing: 'Could not open the recent file. It may have been moved or deleted.', backupRestored: 'Backup restored. Save As to keep the document.', backupInvalid: 'Could not restore backup: invalid file format.' },
+  ja: { backup: 'バックアップ', restoreBackup: 'バックアップを復元', exportAs: 'エクスポート', saveFailed: '保存に失敗しました。ファイルのパスと権限を確認してください。', recentMissing: '最近使ったファイルを開けません。移動または削除された可能性があります。', backupRestored: 'バックアップを復元しました。別名で保存してください。', backupInvalid: 'バックアップを復元できません。ファイル形式が無効です。' },
+  ko: { backup: '백업', restoreBackup: '백업 복원', exportAs: '내보내기', saveFailed: '저장하지 못했습니다. 파일 경로와 권한을 확인하세요.', recentMissing: '최근 파일을 열 수 없습니다. 이동되었거나 삭제되었을 수 있습니다.', backupRestored: '백업을 복원했습니다. 다른 이름으로 저장하세요.', backupInvalid: '백업을 복원할 수 없습니다. 파일 형식이 올바르지 않습니다.' },
+  fr: { backup: 'Sauvegarde', restoreBackup: 'Restaurer la sauvegarde', exportAs: 'Exporter', saveFailed: 'Échec de l’enregistrement. Vérifiez le chemin et les autorisations.', recentMissing: 'Impossible d’ouvrir le fichier récent. Il a peut-être été déplacé ou supprimé.', backupRestored: 'Sauvegarde restaurée. Enregistrez sous pour conserver le document.', backupInvalid: 'Impossible de restaurer la sauvegarde : format de fichier invalide.' },
+  de: { backup: 'Sicherung', restoreBackup: 'Sicherung wiederherstellen', exportAs: 'Exportieren', saveFailed: 'Speichern fehlgeschlagen. Prüfen Sie Pfad und Berechtigungen.', recentMissing: 'Die zuletzt verwendete Datei konnte nicht geöffnet werden. Sie wurde möglicherweise verschoben oder gelöscht.', backupRestored: 'Sicherung wiederhergestellt. Bitte unter einem neuen Namen speichern.', backupInvalid: 'Sicherung konnte nicht wiederhergestellt werden: ungültiges Dateiformat.' },
+  es: { backup: 'Copia de seguridad', restoreBackup: 'Restaurar copia', exportAs: 'Exportar como', saveFailed: 'Error al guardar. Comprueba la ruta y los permisos.', recentMissing: 'No se pudo abrir el archivo reciente. Puede haberse movido o eliminado.', backupRestored: 'Copia restaurada. Usa Guardar como para conservar el documento.', backupInvalid: 'No se pudo restaurar la copia: formato de archivo no válido.' },
+}
+
+export const tr = (language: AppLanguage, key: string) => appCopy[language]?.[key] || appCopy.en[key] || key
+
 const uiText: Record<string, Partial<Record<AppLanguage, string>>> = {
   '目录': { en: 'Outline', ja: 'アウトライン', ko: '개요', fr: 'Plan', de: 'Gliederung', es: 'Esquema' },
   '文件': { en: 'Files', ja: 'ファイル', ko: '파일', fr: 'Fichiers', de: 'Dateien', es: 'Archivos' },

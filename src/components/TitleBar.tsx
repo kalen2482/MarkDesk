@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { MenuIcon, SunIcon, MoonIcon, PanelLeftIcon, FocusIcon } from './Icons'
 import type { ThemeMode } from '../types'
-import { useI18n } from '../i18n'
+import { useI18n, tr } from '../i18n'
 
 interface TitleBarProps {
   fileName: string
@@ -17,6 +17,7 @@ interface TitleBarProps {
   onExportHTML: () => void
   onExportPDF: () => void
   onExportBackup: () => void
+  onImportBackup: () => void
   onZenMode: () => void
 }
 
@@ -41,6 +42,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onExportHTML,
   onExportPDF,
   onExportBackup,
+  onImportBackup,
   onZenMode,
 }) => {
   const { language } = useI18n()
@@ -53,6 +55,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     de: 'Sicherung',
     es: 'Copia de seguridad',
   }
+  void backupLabel
   const [menuOpen, setMenuOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -116,9 +119,17 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                 role="menuitem"
                 className="flex items-center w-full px-3 py-1.5 text-sm text-near-black dark:text-dark-text hover:bg-warm-white dark:hover:bg-white/5 transition-colors"
                 onMouseDown={preventBlur}
+                onClick={() => { onImportBackup(); setMenuOpen(false); setExportOpen(false) }}
+              >
+                <span>{tr(language, 'restoreBackup')}</span>
+              </button>
+              <button
+                role="menuitem"
+                className="flex items-center w-full px-3 py-1.5 text-sm text-near-black dark:text-dark-text hover:bg-warm-white dark:hover:bg-white/5 transition-colors"
+                onMouseDown={preventBlur}
                 onClick={() => { onExportBackup(); setMenuOpen(false); setExportOpen(false) }}
               >
-                <span>{backupLabel[language] || backupLabel.en}</span>
+                <span>{tr(language, 'backup')}</span>
               </button>
               <div role="separator" className="my-1 mx-3 h-px bg-whisper-border dark:bg-dark-border" />
 
