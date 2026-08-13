@@ -12,8 +12,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'highlight': ['highlight.js'],
-          'marked': ['marked', 'marked-highlight', 'marked-gfm-heading-id'],
+          'marked': ['marked', 'marked-gfm-heading-id'],
         },
       },
     },

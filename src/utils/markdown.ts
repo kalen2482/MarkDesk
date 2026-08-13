@@ -1,19 +1,11 @@
 import { marked } from 'marked'
-import { markedHighlight } from 'marked-highlight'
 import { gfmHeadingId } from 'marked-gfm-heading-id'
-import hljs from 'highlight.js'
 import DOMPurify from 'dompurify'
 import katex from 'katex'
 import type { HeadingNode } from '../types'
 
 // ── Marked configuration ──
 marked.use(
-  markedHighlight({
-    highlight(code, lang) {
-      const language = hljs.getLanguage(lang) ? lang : 'plaintext'
-      return hljs.highlight(code, { language }).value
-    },
-  }),
   gfmHeadingId(),
 )
 
@@ -164,7 +156,7 @@ export function renderMarkdown(content: string, sourcePath?: string): string {
 
   // Preserve the source line for every heading. DOM order can diverge from
   // Markdown order when extensions (for example callouts) contain headings.
-  const headingLines = extractHeadings(content)
+  const headingLines = tocHeadings
   let headingIndex = 0
   html = html.replace(/<h([1-6])(\b[^>]*)>/g, (tag, level, attributes) => {
     const heading = headingLines[headingIndex++]

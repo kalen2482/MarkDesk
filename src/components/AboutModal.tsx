@@ -68,16 +68,6 @@ export const AboutModal: React.FC<AboutModalProps> = ({ visible, onClose, versio
               <span className="w-16 text-warm-gray-400 flex-shrink-0">作者</span>
               <span className="text-near-black dark:text-dark-text font-medium">Apple</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-16 text-warm-gray-400 flex-shrink-0">邮箱</span>
-              <a
-                href="mailto:heqin_2482@hotmail.com"
-                className="text-notion-blue dark:text-blue-400 hover:underline font-medium"
-                aria-label="发送邮件给作者"
-              >
-                heqin_2482@hotmail.com
-              </a>
-            </div>
           </div>
 
           <p className="mt-5 text-xs leading-relaxed text-warm-gray-400">

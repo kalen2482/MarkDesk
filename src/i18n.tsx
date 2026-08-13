@@ -27,6 +27,52 @@ const appCopy: Record<AppLanguage, Record<string, string>> = {
 
 export const tr = (language: AppLanguage, key: string) => appCopy[language]?.[key] || appCopy.en[key] || key
 
+const toolbarUiText: Record<string, Partial<Record<AppLanguage, string>>> = {
+  '撤销': { en: 'Undo', ja: '元に戻す', ko: '실행 취소', fr: 'Annuler', de: 'Rückgängig', es: 'Deshacer' },
+  '重做': { en: 'Redo', ja: 'やり直す', ko: '다시 실행', fr: 'Rétablir', de: 'Wiederholen', es: 'Rehacer' },
+  '加粗': { en: 'Bold', ja: '太字', ko: '굵게', fr: 'Gras', de: 'Fett', es: 'Negrita' },
+  '斜体': { en: 'Italic', ja: '斜体', ko: '기울임꼴', fr: 'Italique', de: 'Kursiv', es: 'Cursiva' },
+  '删除线': { en: 'Strikethrough', ja: '取り消し線', ko: '취소선', fr: 'Barré', de: 'Durchgestrichen', es: 'Tachado' },
+  '下划线': { en: 'Underline', ja: '下線', ko: '밑줄', fr: 'Souligné', de: 'Unterstrichen', es: 'Subrayado' },
+  '行内代码': { en: 'Inline code', ja: 'インラインコード', ko: '인라인 코드', fr: 'Code en ligne', de: 'Inline-Code', es: 'Código en línea' },
+  '无序列表': { en: 'Bulleted list', ja: '箇条書き', ko: '글머리 기호 목록', fr: 'Liste à puces', de: 'Aufzählung', es: 'Lista con viñetas' },
+  '有序列表': { en: 'Ordered list', ja: '番号付きリスト', ko: '번호 매기기 목록', fr: 'Liste ordonnée', de: 'Nummerierte Liste', es: 'Lista ordenada' },
+  '任务列表': { en: 'Task list', ja: 'タスクリスト', ko: '작업 목록', fr: 'Liste de tâches', de: 'Aufgabenliste', es: 'Lista de tareas' },
+  '增加缩进': { en: 'Increase indent', ja: 'インデントを増やす', ko: '들여쓰기 늘리기', fr: 'Augmenter le retrait', de: 'Einzug vergrößern', es: 'Aumentar sangría' },
+  '减少缩进': { en: 'Decrease indent', ja: 'インデントを減らす', ko: '들여쓰기 줄이기', fr: 'Réduire le retrait', de: 'Einzug verkleinern', es: 'Reducir sangría' },
+  '引用块': { en: 'Quote block', ja: '引用', ko: '인용 블록', fr: 'Citation', de: 'Zitatblock', es: 'Cita' },
+  '高亮标记': { en: 'Highlight', ja: 'ハイライト', ko: '강조 표시', fr: 'Surlignage', de: 'Hervorheben', es: 'Resaltar' },
+  '字体颜色': { en: 'Text color', ja: '文字色', ko: '글자 색', fr: 'Couleur du texte', de: 'Textfarbe', es: 'Color del texto' },
+  '背景颜色': { en: 'Background color', ja: '背景色', ko: '배경색', fr: 'Couleur d’arrière-plan', de: 'Hintergrundfarbe', es: 'Color de fondo' },
+  '字号': { en: 'Font size', ja: '文字サイズ', ko: '글꼴 크기', fr: 'Taille de police', de: 'Schriftgröße', es: 'Tamaño de fuente' },
+  '超链接': { en: 'Link', ja: 'リンク', ko: '링크', fr: 'Lien', de: 'Link', es: 'Enlace' },
+  '图片': { en: 'Image', ja: '画像', ko: '이미지', fr: 'Image', de: 'Bild', es: 'Imagen' },
+  '表格': { en: 'Table', ja: '表', ko: '표', fr: 'Tableau', de: 'Tabelle', es: 'Tabla' },
+  '代码块': { en: 'Code block', ja: 'コードブロック', ko: '코드 블록', fr: 'Bloc de code', de: 'Codeblock', es: 'Bloque de código' },
+  '分隔线': { en: 'Divider', ja: '区切り線', ko: '구분선', fr: 'Séparateur', de: 'Trennlinie', es: 'Separador' },
+  '公式': { en: 'Formula', ja: '数式', ko: '수식', fr: 'Formule', de: 'Formel', es: 'Fórmula' },
+  'Mermaid 图表': { en: 'Mermaid diagram', ja: 'Mermaid 図', ko: 'Mermaid 다이어그램', fr: 'Diagramme Mermaid', de: 'Mermaid-Diagramm', es: 'Diagrama Mermaid' },
+  '提示块': { en: 'Callout', ja: 'コールアウト', ko: '콜아웃', fr: 'Encadré', de: 'Hinweisblock', es: 'Aviso' },
+  '脚注': { en: 'Footnote', ja: '脚注', ko: '각주', fr: 'Note de bas de page', de: 'Fußnote', es: 'Nota al pie' },
+  '目录': { en: 'Table of contents', ja: '目次', ko: '목차', fr: 'Table des matières', de: 'Inhaltsverzeichnis', es: 'Tabla de contenido' },
+  '格式刷': { en: 'Format painter', ja: '書式のコピー', ko: '서식 복사', fr: 'Reproduire la mise en forme', de: 'Format übertragen', es: 'Copiar formato' },
+  '快捷键': { en: 'Keyboard shortcuts', ja: 'キーボードショートカット', ko: '키보드 단축키', fr: 'Raccourcis clavier', de: 'Tastenkürzel', es: 'Atajos de teclado' },
+  '快捷键帮助': { en: 'Keyboard shortcut help', ja: 'ショートカットヘルプ', ko: '단축키 도움말', fr: 'Aide des raccourcis', de: 'Tastenkürzel-Hilfe', es: 'Ayuda de atajos' },
+  '关于': { en: 'About', ja: 'このアプリについて', ko: '정보', fr: 'À propos', de: 'Über', es: 'Acerca de' },
+  '更多工具': { en: 'More tools', ja: 'その他のツール', ko: '더 많은 도구', fr: 'Plus d’outils', de: 'Weitere Werkzeuge', es: 'Más herramientas' },
+  '排版': { en: 'Typography', ja: '書式', ko: '서식', fr: 'Mise en forme', de: 'Formatierung', es: 'Formato' },
+  '插入内容': { en: 'Insert content', ja: 'コンテンツを挿入', ko: '콘텐츠 삽입', fr: 'Insérer du contenu', de: 'Inhalt einfügen', es: 'Insertar contenido' },
+  '高级格式': { en: 'Advanced formatting', ja: '高度な書式', ko: '고급 서식', fr: 'Mise en forme avancée', de: 'Erweiterte Formatierung', es: 'Formato avanzado' },
+  '工具': { en: 'Tools', ja: 'ツール', ko: '도구', fr: 'Outils', de: 'Werkzeuge', es: 'Herramientas' },
+  '更多': { en: 'More', ja: 'その他', ko: '더 보기', fr: 'Plus', de: 'Mehr', es: 'Más' },
+  '标题快捷': { en: 'Heading shortcuts', ja: '見出しショートカット', ko: '제목 단축키', fr: 'Raccourcis de titres', de: 'Überschriften', es: 'Atajos de títulos' },
+  '正文': { en: 'Paragraph', ja: '本文', ko: '본문', fr: 'Paragraphe', de: 'Absatz', es: 'Párrafo' },
+  ...Object.fromEntries(Array.from({ length: 6 }, (_, index) => {
+    const level = index + 1
+    return [`标题 ${level}`, { en: `Heading ${level}`, ja: `見出し ${level}`, ko: `제목 ${level}`, fr: `Titre ${level}`, de: `Überschrift ${level}`, es: `Título ${level}` }]
+  })),
+}
+
 const uiText: Record<string, Partial<Record<AppLanguage, string>>> = {
   '目录': { en: 'Outline', ja: 'アウトライン', ko: '개요', fr: 'Plan', de: 'Gliederung', es: 'Esquema' },
   '文件': { en: 'Files', ja: 'ファイル', ko: '파일', fr: 'Fichiers', de: 'Dateien', es: 'Archivos' },
@@ -67,13 +113,18 @@ const uiText: Record<string, Partial<Record<AppLanguage, string>>> = {
   '正文': { en: 'Paragraph', ja: '本文', ko: '본문', fr: 'Paragraphe', de: 'Absatz', es: 'Párrafo' },
 }
 
+export const translateUiText = (language: AppLanguage, value: string): string =>
+  toolbarUiText[value]?.[language] || uiText[value]?.[language] || value
+
 const protectedSelector = 'textarea, input, pre, code, .markdown-preview, .contenteditable-preview, .preview-content'
 const originalText = new WeakMap<Text, string>()
 const originalAttributes = new WeakMap<HTMLElement, Partial<Record<'title' | 'aria-label' | 'placeholder', string>>>()
-export const localizeApplicationUi = (language: AppLanguage) => {
-  const translate = (value: string) => uiText[value]?.[language] || value
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+export const localizeApplicationUi = (language: AppLanguage, root: Node = document.body) => {
+  if (root instanceof Element && root.closest(protectedSelector)) return
+  const translate = (value: string) => translateUiText(language, value)
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
   const nodes: Text[] = []
+  if (root.nodeType === Node.TEXT_NODE) nodes.push(root as Text)
   while (walker.nextNode()) nodes.push(walker.currentNode as Text)
   nodes.forEach((node) => {
     const parent = node.parentElement
@@ -84,7 +135,12 @@ export const localizeApplicationUi = (language: AppLanguage) => {
     const translated = translate(trimmed)
     if (translated !== trimmed) node.nodeValue = source.replace(trimmed, translated)
   })
-  document.querySelectorAll<HTMLElement>('[title], [aria-label], [placeholder]').forEach((el) => {
+  const elements: HTMLElement[] = []
+  if (root instanceof HTMLElement && root.matches('[title], [aria-label], [placeholder]')) elements.push(root)
+  if (root instanceof Element || root instanceof Document || root instanceof DocumentFragment) {
+    elements.push(...Array.from(root.querySelectorAll<HTMLElement>('[title], [aria-label], [placeholder]')))
+  }
+  elements.forEach((el) => {
     if (el.closest(protectedSelector)) return
     ;(['title', 'aria-label', 'placeholder'] as const).forEach((attribute) => {
       const originals = originalAttributes.get(el) || {}

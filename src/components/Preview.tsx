@@ -1,9 +1,17 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react'
+import React, { useRef, useEffect, useCallback, useDeferredValue, useState } from 'react'
 import { renderMarkdown } from '../utils/markdown'
+import { highlightCodeBlocks } from '../utils/codeHighlight'
 import { htmlToMarkdown } from '../utils/htmlToMarkdown'
-import mermaid from 'mermaid'
+import { selectPastedMarkdown } from '../utils/clipboardMarkdown'
 import '../styles/preview.css'
 import type { Settings } from '../types'
+
+type MermaidApi = typeof import('mermaid')['default']
+let mermaidPromise: Promise<MermaidApi> | null = null
+const loadMermaid = () => {
+  if (!mermaidPromise) mermaidPromise = import('mermaid').then((module) => module.default)
+  return mermaidPromise
+}
 
 interface PreviewProps {
   content: string
@@ -40,36 +48,24 @@ export const Preview: React.FC<PreviewProps> = ({
   const [isDark, setIsDark] = useState(false)
   const selectedImageRef = useRef<HTMLImageElement | null>(null)
   const syncingScrollRef = useRef(false)
+  const hasMountedInitialRender = useRef(false)
+  const deferredContent = useDeferredValue(content)
+  const renderContent = content.length >= 40_000 ? deferredContent : content
 
-  // ── Mermaid init ──
+  // Mermaid is intentionally loaded only when a document actually contains a diagram.
   useEffect(() => {
-    const darkMode = document.documentElement.classList.contains('dark')
-    setIsDark(darkMode)
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: darkMode ? 'dark' : 'default',
-      securityLevel: 'strict',
-      fontFamily: '-apple-system, system-ui, "Segoe UI", sans-serif',
-    })
+    setIsDark(document.documentElement.classList.contains('dark'))
   }, [])
 
-  // Re-init mermaid when theme changes
+  // Re-render diagrams when the theme changes, without eagerly loading Mermaid.
   useEffect(() => {
     const observer = new MutationObserver(() => {
       const darkMode = document.documentElement.classList.contains('dark')
       if (darkMode !== isDark) {
         setIsDark(darkMode)
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: darkMode ? 'dark' : 'default',
-          securityLevel: 'strict',
-          fontFamily: '-apple-system, system-ui, "Segoe UI", sans-serif',
-        })
-        // Force re-render of mermaid diagrams
         if (previewRef.current) {
           previewRef.current.querySelectorAll('.mermaid-diagram svg').forEach(svg => svg.remove())
         }
-        setRenderedHtml(prev => prev + '')  // Trigger re-render
       }
     })
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
@@ -79,18 +75,37 @@ export const Preview: React.FC<PreviewProps> = ({
   // ── Render markdown when content changes from editor ──
   // Check syncSource prop directly (not a ref) so it's always in sync with content
   useEffect(() => {
-    // Skip if the update came from preview editing (avoid loop)
-    if (syncSource === 'preview') {
+    // Skip an update coming from the currently mounted visual editor so the
+    // caret is not lost. A newly mounted preview has no DOM to preserve and
+    // must render even when the latest update originated from the preview.
+    if (syncSource === 'preview' && hasMountedInitialRender.current) {
       return
     }
 
     isInternalUpdate.current = true
-    const html = renderMarkdown(content, sourcePath)
+    const html = renderMarkdown(renderContent, sourcePath)
     setRenderedHtml(html)
+    hasMountedInitialRender.current = true
     requestAnimationFrame(() => {
       isInternalUpdate.current = false
     })
-  }, [content, sourcePath, syncSource])
+  }, [renderContent, sourcePath, syncSource])
+
+  // Code highlighting is a progressive enhancement. Plain code appears first;
+  // highlight.js is downloaded only when fenced code is present.
+  useEffect(() => {
+    const root = previewRef.current
+    if (!root || !renderedHtml) return
+    let cancelled = false
+    const run = () => {
+      if (!cancelled) void highlightCodeBlocks(root)
+    }
+    const idle = window.requestIdleCallback(run, { timeout: 350 })
+    return () => {
+      cancelled = true
+      window.cancelIdleCallback(idle)
+    }
+  }, [renderedHtml])
 
   // ── Render mermaid diagrams after HTML is mounted ──
   useEffect(() => {
@@ -100,14 +115,20 @@ export const Preview: React.FC<PreviewProps> = ({
     if (diagrams.length === 0) return
 
     let cancelled = false
-    const renderAll = async () => {
-      for (const el of Array.from(diagrams)) {
-        if (cancelled) return
+    let observer: IntersectionObserver | null = null
+    const pending = new Set<HTMLElement>()
+    const renderOne = async (el: HTMLElement) => {
+        if (cancelled || el.querySelector('svg')) return
         const raw = el.getAttribute('data-mermaid')
-        if (!raw) continue
-        // Skip if already rendered (has SVG child)
-        if (el.querySelector('svg')) continue
+        if (!raw) return
         try {
+          const mermaid = await loadMermaid()
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: isDark ? 'dark' : 'default',
+            securityLevel: 'strict',
+            fontFamily: '-apple-system, system-ui, "Segoe UI", sans-serif',
+          })
           const id = `mermaid-${Math.random().toString(36).slice(2)}`
           const { svg } = await mermaid.render(id, decodeURIComponent(raw))
           if (!cancelled) {
@@ -118,11 +139,24 @@ export const Preview: React.FC<PreviewProps> = ({
             el.innerHTML = `<div class="mermaid-error">Mermaid 渲染失败</div>`
           }
         }
-      }
     }
-    renderAll()
-    return () => { cancelled = true }
-  }, [renderedHtml])
+
+    if ('IntersectionObserver' in window) {
+      observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return
+          const element = entry.target as HTMLElement
+          observer?.unobserve(element)
+          pending.delete(element)
+          void renderOne(element)
+        })
+      }, { root: containerRef.current, rootMargin: '240px 0px' })
+      Array.from(diagrams).forEach((diagram) => { pending.add(diagram); observer?.observe(diagram) })
+    } else {
+      Array.from(diagrams).forEach((diagram) => void renderOne(diagram))
+    }
+    return () => { cancelled = true; observer?.disconnect(); pending.clear() }
+  }, [renderedHtml, isDark])
 
   // ── Scroll sync ──
   useEffect(() => {
@@ -193,6 +227,54 @@ export const Preview: React.FC<PreviewProps> = ({
     }, 500) // 500ms debounce
   }, [editable, onHtmlChange])
 
+  // Paste Markdown as Markdown rather than as literal contenteditable text.
+  // Rich clipboard content is first converted to Markdown, then rendered back
+  // to safe HTML before it is inserted into the visual editor.
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
+    if (!editable || !previewRef.current) return
+
+    const plainText = e.clipboardData.getData('text/plain')
+    const clipboardHtml = e.clipboardData.getData('text/html')
+    if (!plainText && !clipboardHtml) return
+
+    e.preventDefault()
+    let convertedHtml = ''
+    if (clipboardHtml) {
+      try {
+        convertedHtml = htmlToMarkdown(clipboardHtml)
+      } catch (err) {
+        console.error('Clipboard HTML conversion error:', err)
+      }
+    }
+
+    const markdown = selectPastedMarkdown(plainText, convertedHtml)
+    if (!markdown) return
+
+    const preview = previewRef.current
+    const selection = window.getSelection()
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+    const canInsertAtSelection = !!range && preview.contains(range.commonAncestorContainer)
+    const html = renderMarkdown(markdown, sourcePath)
+
+    if (canInsertAtSelection && range) {
+      range.deleteContents()
+      const fragment = range.createContextualFragment(html)
+      const lastNode = fragment.lastChild
+      range.insertNode(fragment)
+      if (lastNode) {
+        range.setStartAfter(lastNode)
+        range.collapse(true)
+        selection?.removeAllRanges()
+        selection?.addRange(range)
+      }
+    } else {
+      preview.insertAdjacentHTML('beforeend', html)
+    }
+
+    preview.focus()
+    handleInput()
+  }, [editable, handleInput, sourcePath])
+
   // Cleanup debounce timer
   useEffect(() => {
     return () => {
@@ -256,6 +338,7 @@ export const Preview: React.FC<PreviewProps> = ({
         contentEditable={editable}
         suppressContentEditableWarning
         onInput={handleInput}
+        onPaste={handlePaste}
         onKeyDown={handleKeyDown}
         spellCheck={settings.spellCheck}
         dangerouslySetInnerHTML={{ __html: renderedHtml }}

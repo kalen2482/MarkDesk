@@ -1,7 +1,7 @@
 {
   "name": "markdesk",
   "private": true,
-  "version": "0.2.4",
+  "version": "0.2.5",
   "license": "Apache-2.0",
   "type": "module",
   "main": "electron/main.cjs",
@@ -9,6 +9,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "node --test scripts/*.test.mjs",
+    "test:unit": "vitest run src/utils/toolbarLayout.test.ts",
+    "test:all": "npm run test && npm run test:unit",
     "preview": "vite preview",
     "dist": "vite build && electron-builder --win --config electron-builder.yml",
     "dist:win": "vite build && electron-builder --win nsis --config electron-builder.yml"

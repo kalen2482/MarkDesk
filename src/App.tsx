@@ -40,6 +40,7 @@ import { TabBar } from './components/TabBar'
 import { Resizer } from './components/Resizer'
 import type { ContextMenuItem } from './components/ContextMenu'
 import { extractHeadings, buildHeadingTree, countWords, renderMarkdown } from './utils/markdown'
+import { renderHighlightedHtml } from './utils/codeHighlight'
 import { createBackup, parseBackup } from './utils/backup'
 
 import { SAMPLE_CONTENT } from './utils/sampleContent'
@@ -72,6 +73,8 @@ const DEFAULT_SETTINGS: Settings = {
   defaultDisplayMode: 'split',
 }
 
+const LAST_OPEN_FILE_KEY = 'markdesk-last-open-file'
+
 let tabIdCounter = 0
 const genTabId = () => `tab-${++tabIdCounter}`
 
@@ -103,6 +106,12 @@ export default function App() {
   // history-related callbacks to be recreated on every keystroke.
   const tabsRef = useRef(tabs)
   tabsRef.current = tabs
+
+  // Remember the last real document that became active. Starter documents are
+  // deliberately ignored so they cannot overwrite the restore target.
+  useEffect(() => {
+    if (activeTab?.filePath) localStorage.setItem(LAST_OPEN_FILE_KEY, activeTab.filePath)
+  }, [activeTab?.filePath])
 
   const updateActiveTab = useCallback((updater: (tab: FileTab) => FileTab) => {
     setTabs((prev) => prev.map((t) => (t.id === activeTabId ? updater(t) : t)))
@@ -317,10 +326,13 @@ export default function App() {
   }, [language, showNotice])
 
   // ── Derived data ──
+  // Keep typing responsive in very large documents. The outline and statistics
+  // may trail the editor by a frame, while the source text remains immediate.
+  const deferredDerivedContent = React.useDeferredValue(content)
   const headings = React.useMemo(() => {
-    const flat = extractHeadings(content)
+    const flat = extractHeadings(deferredDerivedContent)
     return buildHeadingTree(flat)
-  }, [content])
+  }, [deferredDerivedContent])
 
   const flatHeadings = React.useMemo(() => {
     const result: HeadingNode[] = []
@@ -334,7 +346,7 @@ export default function App() {
     return result
   }, [headings])
 
-  const stats = React.useMemo(() => countWords(content), [content])
+  const stats = React.useMemo(() => countWords(deferredDerivedContent), [deferredDerivedContent])
 
   const currentHeadingLevel = React.useMemo(() => {
     const beforeCursor = content.substring(0, selectionStart)
@@ -379,10 +391,23 @@ export default function App() {
       // Re-apply after React has committed the newly selected language.  A frame
       // is important when switching back to Chinese: text nodes previously
       // replaced by the DOM translator must first be restored from their source.
-      const frame = window.requestAnimationFrame(() => localizeApplicationUi(language))
-      const observer = new MutationObserver(() => localizeApplicationUi(language))
+      const initialFrame = window.requestAnimationFrame(() => localizeApplicationUi(language))
+      let mutationFrame = 0
+      const pendingRoots = new Set<Node>()
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => mutation.addedNodes.forEach((node) => pendingRoots.add(node)))
+        window.cancelAnimationFrame(mutationFrame)
+        mutationFrame = window.requestAnimationFrame(() => {
+          pendingRoots.forEach((root) => localizeApplicationUi(language, root))
+          pendingRoots.clear()
+        })
+      })
       observer.observe(document.body, { childList: true, subtree: true })
-      return () => { window.cancelAnimationFrame(frame); observer.disconnect() }
+      return () => {
+        window.cancelAnimationFrame(initialFrame)
+        window.cancelAnimationFrame(mutationFrame)
+        observer.disconnect()
+      }
   }, [language])
 
   // ── Content change handler (from textarea editor) ──
@@ -411,6 +436,15 @@ export default function App() {
   const handleCursorChange = useCallback((line: number, column: number) => {
     setCursorLine(line)
     setCursorColumn(column)
+  }, [])
+
+  const handleDisplayModeChange = useCallback((mode: DisplayMode) => {
+    // `preview` is a transient direction marker, not persistent document
+    // state. Clear it before remounting a view so the new Preview always
+    // renders the current Markdown content on its first frame.
+    syncSourceRef.current = null
+    setSyncSource(null)
+    setDisplayMode(mode)
   }, [])
 
   const handleSelectionChange = useCallback((start: number, end: number) => {
@@ -1020,8 +1054,8 @@ export default function App() {
     input.click()
   }, [language, restoreBackupText, showNotice])
 
-  const handleExportHTML = useCallback(() => {
-    const html = renderMarkdown(content)
+  const handleExportHTML = useCallback(async () => {
+    const html = await renderHighlightedHtml(renderMarkdown(content))
     const fullHTML = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -1051,8 +1085,8 @@ ${html}
     URL.revokeObjectURL(url)
   }, [content, activeTab.name])
 
-  const handleExportPDF = useCallback(() => {
-    const printContent = renderMarkdown(content)
+  const handleExportPDF = useCallback(async () => {
+    const printContent = await renderHighlightedHtml(renderMarkdown(content))
     const win = window.open('', '_blank')
     if (!win) return
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${activeTab.name}</title>
@@ -1327,9 +1361,9 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
       if (ctrl && e.key === 'i' && !e.shiftKey) { e.preventDefault(); applyAction('italic'); return }
       if (ctrl && e.key === 'f' && !e.shiftKey) { e.preventDefault(); setSearchVisible(true); return }
       if (ctrl && e.key === 'h' && !e.shiftKey) { e.preventDefault(); setSearchVisible(true); return }
-      if (ctrl && e.key === 'e' && !e.shiftKey) { e.preventDefault(); setDisplayMode('edit'); return }
-      if (ctrl && e.key === 'r' && !e.shiftKey) { e.preventDefault(); setDisplayMode('visual'); return }
-      if (ctrl && e.shiftKey && e.key === 'V') { e.preventDefault(); setDisplayMode('visual'); return }
+      if (ctrl && e.key === 'e' && !e.shiftKey) { e.preventDefault(); handleDisplayModeChange('edit'); return }
+      if (ctrl && e.key === 'r' && !e.shiftKey) { e.preventDefault(); handleDisplayModeChange('visual'); return }
+      if (ctrl && e.shiftKey && e.key === 'V') { e.preventDefault(); handleDisplayModeChange('visual'); return }
       if (ctrl && e.key >= '1' && e.key <= '6') { e.preventDefault(); applyAction('heading', e.key); return }
       if (ctrl && e.key === '0') { e.preventDefault(); applyAction('heading', '0'); return }
       if (ctrl && e.shiftKey && e.key === 'M') { e.preventDefault(); setSidebarVisible(!s.sidebarVisible); return }
@@ -1347,36 +1381,58 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
 
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [applyAction, handleUndo, handleRedo, handleNewFile, handleOpenFile, handleSave, handleSaveAs, handleZoomIn, handleZoomOut])
+  }, [applyAction, handleUndo, handleRedo, handleNewFile, handleOpenFile, handleSave, handleSaveAs, handleZoomIn, handleZoomOut, handleDisplayModeChange])
 
   // ── Electron: notify ready & open files passed via OS file association ──
   useEffect(() => {
     const api = window.electronAPI
     if (!api) return
-    api.notifyReady()
+    let openedFromOs = false
     const openFile = (file: { path: string; content: string }) => {
       const name = fileNameFromPath(file.path)
-      const existing = tabsRef.current.find((tab) => tab.filePath === file.path)
+      const pathKey = file.path.toLocaleLowerCase()
+      const existing = tabsRef.current.find((tab) => tab.filePath?.toLocaleLowerCase() === pathKey)
       if (existing) {
         setActiveTabId(existing.id)
         updateHistoryFlags()
         addRecentFile(name, file.path)
+        localStorage.setItem(LAST_OPEN_FILE_KEY, file.path)
         return
       }
       const newTab: FileTab = { id: genTabId(), name, content: file.content, isDirty: false, filePath: file.path }
-      setTabs((prev) => {
-        // A clean starter document is only a welcome placeholder. Opening a
-        // real file replaces it rather than leaving an unwanted sample tab.
-        const next = isUntouchedStarterTab(prev) ? [newTab] : [...prev, newTab]
-        tabsRef.current = next
-        return next
-      })
+      // Update the ref before scheduling React state so simultaneous restore/
+      // file-association events cannot create duplicate tabs.
+      const current = tabsRef.current
+      const next = isUntouchedStarterTab(current) ? [newTab] : [...current, newTab]
+      tabsRef.current = next
+      setTabs(next)
       setActiveTabId(newTab.id)
       historyMapRef.current.set(newTab.id, { stack: [file.content], index: 0 })
       updateHistoryFlags()
       addRecentFile(name, file.path)
+      localStorage.setItem(LAST_OPEN_FILE_KEY, file.path)
     }
-    return api.onFileOpen(openFile)
+    const unsubscribe = api.onFileOpen((file) => {
+      openedFromOs = true
+      openFile(file)
+    })
+    api.notifyReady()
+
+    // Give a file supplied by Windows/file association priority. Otherwise,
+    // restore the last document that was active in the previous app session.
+    const restoreTimer = window.setTimeout(async () => {
+      if (openedFromOs) return
+      const lastPath = localStorage.getItem(LAST_OPEN_FILE_KEY)
+      if (!lastPath) return
+      const file = await api.openRecentFile(lastPath)
+      if (file) openFile(file)
+      else localStorage.removeItem(LAST_OPEN_FILE_KEY)
+    }, 120)
+
+    return () => {
+      window.clearTimeout(restoreTimer)
+      unsubscribe()
+    }
   }, [updateHistoryFlags, addRecentFile])
 
   // ── Render ──
@@ -1477,7 +1533,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         canUndo={canUndo}
         canRedo={canRedo}
         displayMode={displayMode}
-        onModeChange={setDisplayMode}
+        onModeChange={handleDisplayModeChange}
         onSearchToggle={() => setSearchVisible(!searchVisible)}
         currentHeadingLevel={currentHeadingLevel}
         onSettings={() => setSettingsVisible(true)}
