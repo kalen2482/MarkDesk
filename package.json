@@ -2,6 +2,13 @@
   "name": "markdesk",
   "private": true,
   "version": "0.2.5",
+  "description": "A lightweight, local-first Markdown editor with source, split, and visual editing modes.",
+  "author": "Apple",
+  "homepage": "https://github.com/kalen2482/MarkDesk",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kalen2482/MarkDesk.git"
+  },
   "license": "Apache-2.0",
   "type": "module",
   "main": "electron/main.cjs",

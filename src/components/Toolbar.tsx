@@ -12,6 +12,7 @@ import { EmojiPicker } from './EmojiPicker'
 import type { DisplayMode } from '../types'
 import { translateUiText, useI18n } from '../i18n'
 import { hiddenToolbarGroups, isToolbarGroupVisible, nextToolbarDensity, type ToolbarDensity } from '../utils/toolbarLayout'
+import { capturePreviewRange, restorePreviewRange } from '../utils/richTextActions'
 
 const PRESET_COLORS = [
   '#e74c3c', '#e67e22', '#f1c40f', '#27ae60', '#0075de', '#9b59b6',
@@ -119,6 +120,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const primaryToolbarRef = useRef<HTMLDivElement>(null)
   const [density, setDensity] = useState<ToolbarDensity>('full')
   const [moreOpen, setMoreOpen] = useState(false)
+  const [moreEmojiPicker, setMoreEmojiPicker] = useState(false)
   const [headingDropdown, setHeadingDropdown] = useState(false)
   const [insertPanel, setInsertPanel] = useState(false)
   const [colorPanel, setColorPanel] = useState<null | 'text' | 'bg'>(null)
@@ -130,6 +132,32 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const colorRef = useRef<HTMLDivElement>(null)
   const emojiRef = useRef<HTMLDivElement>(null)
   const fontSizeRef = useRef<HTMLDivElement>(null)
+  const savedPreviewRangeRef = useRef<Range | null>(null)
+  const savedSourceSelectionRef = useRef<{ start: number; end: number } | null>(null)
+
+  const rememberEditorSelection = () => {
+    savedPreviewRangeRef.current = capturePreviewRange()
+    const textarea = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown 编辑器"]')
+    savedSourceSelectionRef.current = textarea
+      ? { start: textarea.selectionStart, end: textarea.selectionEnd }
+      : null
+  }
+
+  const runMenuAction = (action: string, value?: string) => {
+    const restoredPreview = restorePreviewRange(savedPreviewRangeRef.current)
+    if (!restoredPreview && savedSourceSelectionRef.current) {
+      const textarea = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown 编辑器"]')
+      if (textarea) {
+        const start = Math.min(savedSourceSelectionRef.current.start, textarea.value.length)
+        const end = Math.min(savedSourceSelectionRef.current.end, textarea.value.length)
+        textarea.focus()
+        textarea.setSelectionRange(start, end)
+      }
+    }
+    onAction(action, value)
+    savedPreviewRangeRef.current = null
+    savedSourceSelectionRef.current = null
+  }
 
   const focusFirstMenuItem = (ref: React.RefObject<HTMLDivElement>) => {
     requestAnimationFrame(() => ref.current?.querySelector<HTMLElement>('[role="menuitem"], [role="option"]')?.focus())
@@ -161,7 +189,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   }, [])
 
   useEffect(() => {
-    if (density === 'full') setMoreOpen(false)
+    if (density === 'full') {
+      setMoreOpen(false)
+      setMoreEmojiPicker(false)
+      savedPreviewRangeRef.current = null
+      savedSourceSelectionRef.current = null
+    }
   }, [density])
 
   // Density drives the measured overflow decision; menu visibility is refined by
@@ -178,6 +211,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       }
       if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
         setMoreOpen(false)
+        setMoreEmojiPicker(false)
       }
       if (colorRef.current && !colorRef.current.contains(e.target as Node)) {
         setColorPanel(null)
@@ -565,8 +599,20 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <button
             className="tb-btn px-2 text-lg leading-none"
             onMouseDown={preventBlur}
-            onClick={() => { const next = !moreOpen; setMoreOpen(next); if (next) focusFirstMenuItem(moreRef) }}
-            onKeyDown={(event) => { if (event.key === 'ArrowDown') { event.preventDefault(); setMoreOpen(true); focusFirstMenuItem(moreRef) } }}
+            onClick={() => {
+              const next = !moreOpen
+              if (next) rememberEditorSelection()
+              setMoreOpen(next)
+              setMoreEmojiPicker(false)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                rememberEditorSelection()
+                setMoreOpen(true)
+                focusFirstMenuItem(moreRef)
+              }
+            }}
             aria-label={translateUiText(language, '更多工具')}
             aria-haspopup="true"
             aria-expanded={moreOpen}
@@ -575,13 +621,28 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           {moreOpen && (
             <MorePanel
               density={density}
-              onAction={(action, value) => { onAction(action, value); setMoreOpen(false) }}
+              onAction={(action, value) => { runMenuAction(action, value); setMoreOpen(false) }}
+              onEmoji={() => { setMoreOpen(false); setMoreEmojiPicker(true) }}
               onSearch={() => { onSearchToggle(); setMoreOpen(false) }}
               onShortcutHelp={() => { onShortcutHelp(); setMoreOpen(false) }}
               onSettings={() => { onSettings(); setMoreOpen(false) }}
               onAbout={() => { onAbout(); setMoreOpen(false) }}
               onClose={() => setMoreOpen(false)}
               restoreFocus={() => moreRef.current?.querySelector('button')?.focus()}
+            />
+          )}
+          {moreEmojiPicker && (
+            <EmojiPicker
+              align="right"
+              onSelect={(emoji) => {
+                runMenuAction('emoji', emoji)
+                setMoreEmojiPicker(false)
+              }}
+              onClose={() => {
+                setMoreEmojiPicker(false)
+                savedPreviewRangeRef.current = null
+                savedSourceSelectionRef.current = null
+              }}
             />
           )}
         </div>
@@ -650,10 +711,11 @@ interface MorePanelProps extends InsertPanelProps {
   onShortcutHelp: () => void
   onSettings: () => void
   onAbout: () => void
+  onEmoji: () => void
 }
 
 /** Overflow menu used when the measured toolbar width is constrained. */
-const MorePanel: React.FC<MorePanelProps> = ({ density, onAction, onSearch, onShortcutHelp, onSettings, onAbout, onClose = () => {}, restoreFocus }) => {
+const MorePanel: React.FC<MorePanelProps> = ({ density, onAction, onSearch, onShortcutHelp, onSettings, onAbout, onEmoji, onClose = () => {}, restoreFocus }) => {
   const { language } = useI18n()
   const hidden = hiddenToolbarGroups(density)
   const compactOptionalHidden = hidden.includes('compactOptional')
@@ -693,18 +755,18 @@ const MorePanel: React.FC<MorePanelProps> = ({ density, onAction, onSearch, onSh
       <InsertItem icon={<CalloutIcon size={14} />} label="提示块" onClick={() => onAction('callout')} />
       <InsertItem icon={<FootnoteIcon size={14} />} label="脚注" onClick={() => onAction('footnote')} />
       <InsertItem icon={<TocIcon size={14} />} label="目录" onClick={() => onAction('toc')} />
-      <InsertItem icon={<EmojiIcon size={14} />} label="表情符号" onClick={() => onAction('emoji', '😊')} />
+      <InsertItem icon={<EmojiIcon size={14} />} label="表情符号" onClick={onEmoji} />
     </InsertSection>
     </>}
     {secondaryHidden && <>
     <InsertDivider />
     <InsertSection title="排版">
       <InsertItem icon={<FormulaIcon size={14} />} label="公式" onClick={() => onAction('formula')} />
-      <label className="flex items-center w-full px-3 py-1.5 text-sm text-near-black dark:text-dark-text hover:bg-warm-white dark:hover:bg-white/5 transition-colors gap-2.5 cursor-pointer" role="menuitem">
+      <label className="flex items-center w-full px-3 py-1.5 text-sm text-near-black dark:text-dark-text hover:bg-warm-white dark:hover:bg-white/5 transition-colors gap-2.5 cursor-pointer" role="menuitem" onMouseDown={preventBlur}>
         <ColorIcon size={14} /><span className="flex-1">{translateUiText(language, '字体颜色')}</span>
         <input type="color" className="w-6 h-6" onChange={(event) => onAction('text-color', event.target.value)} />
       </label>
-      <label className="flex items-center w-full px-3 py-1.5 text-sm text-near-black dark:text-dark-text hover:bg-warm-white dark:hover:bg-white/5 transition-colors gap-2.5 cursor-pointer" role="menuitem">
+      <label className="flex items-center w-full px-3 py-1.5 text-sm text-near-black dark:text-dark-text hover:bg-warm-white dark:hover:bg-white/5 transition-colors gap-2.5 cursor-pointer" role="menuitem" onMouseDown={preventBlur}>
         <BgColorIcon size={14} /><span className="flex-1">{translateUiText(language, '背景颜色')}</span>
         <input type="color" className="w-6 h-6" onChange={(event) => onAction('bg-color', event.target.value)} />
       </label>

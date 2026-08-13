@@ -18,6 +18,8 @@ All notable changes to MarkDesk are documented here.
 - 修复在可视化编辑区粘贴 Markdown 后，标题、列表、表格等内容被转义或错误解析的问题。
 - 修复粘贴内容后切换源码、分栏或可视化模式时，预览区域可能变为空白的问题。
 - 修复窄窗口中工具栏按钮被截断、模式切换入口被收起的问题。
+- 修复工具被收纳到“更多”菜单后点击无效，以及表情选择器无法打开的问题。
+- 修复可视化编辑和预览模式中有序列表编号及无序列表标记消失的问题。
 - 删除“关于 MarkDesk”窗口中的作者邮箱地址。
 
 ### English
@@ -34,6 +36,8 @@ All notable changes to MarkDesk are documented here.
 - Fixed Markdown pasted into the visual editor being escaped or parsed incorrectly, including headings, lists, and tables.
 - Fixed the preview becoming blank after pasted content was followed by switching between Source, Split, and Visual modes.
 - Fixed toolbar controls being clipped and view-mode controls disappearing in narrow windows.
+- Fixed actions becoming unresponsive after moving into the More menu, including the emoji picker failing to open.
+- Restored ordered-list numbers and unordered-list markers in visual editing and preview modes.
 - Removed the author email address from the About MarkDesk dialog.
 
 ## [0.2.0] - 2026-08-03

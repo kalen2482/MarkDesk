@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react'
 interface EmojiPickerProps {
   onSelect: (emoji: string) => void
   onClose: () => void
+  align?: 'left' | 'right'
 }
 
 interface EmojiCategory {
@@ -473,7 +474,7 @@ const EMOJI_KEYWORDS: Record<string, string[]> = {
   '🌄': ['日出', 'mountain sunrise'],
 }
 
-export const EmojiPicker: React.FC<EmojiPickerProps> = ({ onSelect, onClose }) => {
+export const EmojiPicker: React.FC<EmojiPickerProps> = ({ onSelect, onClose, align = 'left' }) => {
   const [activeCategory, setActiveCategory] = useState(0)
   const [search, setSearch] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -522,7 +523,7 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({ onSelect, onClose }) =
   return (
     <div
       ref={containerRef}
-      className="absolute top-full left-0 mt-1 bg-white dark:bg-dark-surface border border-whisper-border dark:border-dark-border rounded-notion-card shadow-notion-deep z-50 w-[320px] h-[360px] flex flex-col"
+      className={`absolute top-full ${align === 'right' ? 'right-0' : 'left-0'} mt-1 bg-white dark:bg-dark-surface border border-whisper-border dark:border-dark-border rounded-notion-card shadow-notion-deep z-50 w-[320px] h-[360px] flex flex-col`}
       role="dialog"
       aria-label="选择表情"
     >

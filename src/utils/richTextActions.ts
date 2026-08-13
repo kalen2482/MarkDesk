@@ -33,6 +33,22 @@ export function capturePreviewRange(): Range | null {
   return preview.contains(range.commonAncestorContainer) ? range.cloneRange() : null
 }
 
+/**
+ * Restore a previously captured visual-editor range after a toolbar menu,
+ * popover, or input temporarily moved focus away from the preview.
+ */
+export function restorePreviewRange(range: Range | null): boolean {
+  if (!range) return false
+  const preview = document.querySelector('.md-preview') as HTMLElement | null
+  if (!preview || !preview.contains(range.commonAncestorContainer)) return false
+
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(range)
+  preview.focus()
+  return true
+}
+
 /** Insert an image at a previously captured visual-editor range. */
 export function insertImageAtPreviewRange(range: Range, src: string, alt: string): boolean {
   const preview = document.querySelector('.md-preview') as HTMLElement | null

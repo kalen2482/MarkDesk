@@ -12,8 +12,6 @@ files:
 win:
   target: nsis
   icon: build/icon.ico
-  # 如需自定义图标，在 build/ 下放 icon.ico 并取消下一行注释
-  # icon: build/icon.ico
 nsis:
   oneClick: false
   perMachine: false
@@ -25,6 +23,6 @@ fileAssociations:
       - md
       - markdown
       - mdx
-    name: Markdown 文档
+    name: MarkDesk Markdown Document
     role: Editor
-    description: MarkDesk Markdown 文档
+    description: Markdown document opened with MarkDesk

@@ -131,6 +131,38 @@
   padding-left: 1.5em;
 }
 
+/* Tailwind's preflight removes native list markers. Restore them explicitly
+   inside Markdown documents so ordered-list numbers and bullet markers remain
+   visible in both preview and visual-editing modes. */
+.md-preview ul {
+  list-style-type: disc;
+}
+
+.md-preview ol {
+  list-style-type: decimal;
+}
+
+.md-preview ul ul {
+  list-style-type: circle;
+}
+
+.md-preview ul ul ul {
+  list-style-type: square;
+}
+
+.md-preview ol ol {
+  list-style-type: lower-alpha;
+}
+
+.md-preview ol ol ol {
+  list-style-type: lower-roman;
+}
+
+.md-preview .contains-task-list,
+.md-preview .task-list-item {
+  list-style-type: none;
+}
+
 .md-preview li {
   margin: 0.25em 0;
 }
