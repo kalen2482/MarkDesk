@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleMaximizeWindow: () => ipcRenderer.send('window:toggleMaximize'),
   closeWindow: () => ipcRenderer.send('window:close'),
   onCloseRequested: (callback) => ipcRenderer.on('app:close-requested', callback),
+  cancelClose: () => ipcRenderer.send('app:cancel-close'),
   confirmClose: () => ipcRenderer.send('app:confirm-close'),
 
   // Subscribe to OS "open with" / file-association events.

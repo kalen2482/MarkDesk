@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useCallback, useDeferredValue, useState } fro
 import { renderMarkdown } from '../utils/markdown'
 import { highlightCodeBlocks } from '../utils/codeHighlight'
 import { htmlToMarkdown } from '../utils/htmlToMarkdown'
-import { selectPastedMarkdown } from '../utils/clipboardMarkdown'
+import { replaceMarkedPaste, selectPastedMarkdown } from '../utils/clipboardMarkdown'
 import '../styles/preview.css'
 import type { Settings } from '../types'
 
@@ -207,6 +207,18 @@ export const Preview: React.FC<PreviewProps> = ({
     }
   }, [content, editable, onHeadingClick])
 
+  const syncPreviewToMarkdown = useCallback(() => {
+    if (!editable || !onHtmlChange) return
+    if (isInternalUpdate.current) return
+    if (!previewRef.current) return
+
+    try {
+      onHtmlChange(htmlToMarkdown(previewRef.current.innerHTML))
+    } catch (err) {
+      console.error('htmlToMarkdown error:', err)
+    }
+  }, [editable, onHtmlChange])
+
   // ── Handle contenteditable input (debounced) ──
   const handleInput = useCallback(() => {
     if (!editable || !onHtmlChange) return
@@ -216,20 +228,13 @@ export const Preview: React.FC<PreviewProps> = ({
       clearTimeout(debounceTimer.current)
     }
     debounceTimer.current = setTimeout(() => {
-      if (!previewRef.current) return
-      const html = previewRef.current.innerHTML
-      try {
-        const md = htmlToMarkdown(html)
-        onHtmlChange(md)
-      } catch (err) {
-        console.error('htmlToMarkdown error:', err)
-      }
+      syncPreviewToMarkdown()
     }, 500) // 500ms debounce
-  }, [editable, onHtmlChange])
+  }, [editable, onHtmlChange, syncPreviewToMarkdown])
 
   // Paste Markdown as Markdown rather than as literal contenteditable text.
-  // Rich clipboard content is first converted to Markdown, then rendered back
-  // to safe HTML before it is inserted into the visual editor.
+  // Plain text is canonical; rich HTML is converted only when plain text is
+  // unavailable, then the selected Markdown is rendered to safe insertion HTML.
   const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
     if (!editable || !previewRef.current) return
 
@@ -254,7 +259,13 @@ export const Preview: React.FC<PreviewProps> = ({
     const selection = window.getSelection()
     const range = selection?.rangeCount ? selection.getRangeAt(0) : null
     const canInsertAtSelection = !!range && preview.contains(range.commonAncestorContainer)
-    const html = renderMarkdown(markdown, sourcePath)
+    // Convert only for the DOM insertion. Mark the inserted range so the
+    // subsequent DOM-to-Markdown pass can restore the exact clipboard text
+    // (tables, whitespace and escaped sequences in particular).
+    const markerId = `MARKDESK_PASTE_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const startMarker = `${markerId}_START`
+    const endMarker = `${markerId}_END`
+    const html = renderMarkdown(`${startMarker}\n\n${markdown}\n\n${endMarker}`, sourcePath)
 
     if (canInsertAtSelection && range) {
       range.deleteContents()
@@ -272,8 +283,36 @@ export const Preview: React.FC<PreviewProps> = ({
     }
 
     preview.focus()
-    handleInput()
-  }, [editable, handleInput, sourcePath])
+    if (debounceTimer.current) clearTimeout(debounceTimer.current)
+    // Paste is a discrete user operation. Commit the canonical Markdown
+    // source directly even if a preceding source render still has its
+    // internal-update guard set; otherwise the right pane changes while the
+    // left source remains stale until a later edit.
+    if (onHtmlChange) {
+      try {
+        const convertedMarkdown = htmlToMarkdown(preview.innerHTML)
+        const exactMarkdown = replaceMarkedPaste(convertedMarkdown, startMarker, endMarker, markdown)
+
+        // Markers serve only as a source-conversion boundary; remove them from
+        // the visual document before React next renders it.
+        const walker = document.createTreeWalker(preview, NodeFilter.SHOW_TEXT)
+        const markerBlocks = new Set<HTMLElement>()
+        let node: Text | null
+        while ((node = walker.nextNode() as Text | null)) {
+          if (node.data === startMarker || node.data === endMarker) {
+            markerBlocks.add((node.parentElement?.closest('p') || node.parentElement) as HTMLElement)
+          }
+        }
+        markerBlocks.forEach((element) => element?.remove())
+        // The browser may normalize an unusual selection context enough to
+        // obscure a marker. Keep the edit in that rare case, after removing
+        // whichever marker nodes could still be found.
+        onHtmlChange(exactMarkdown ?? htmlToMarkdown(preview.innerHTML))
+      } catch (err) {
+        console.error('htmlToMarkdown paste error:', err)
+      }
+    }
+  }, [editable, onHtmlChange, sourcePath])
 
   // Cleanup debounce timer
   useEffect(() => {

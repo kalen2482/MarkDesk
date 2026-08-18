@@ -30,6 +30,7 @@ declare global {
       saveFile: (filePath: string, content: string) => Promise<{ success: boolean; path?: string; error?: string }>
       saveFileAs: (defaultName: string, content: string) => Promise<{ path?: string; error?: string } | null>
       onCloseRequested: (cb: () => void) => void
+      cancelClose: () => void
       confirmClose: () => void
     }
   }
@@ -42,6 +43,7 @@ import type { ContextMenuItem } from './components/ContextMenu'
 import { extractHeadings, buildHeadingTree, countWords, renderMarkdown } from './utils/markdown'
 import { renderHighlightedHtml } from './utils/codeHighlight'
 import { createBackup, parseBackup } from './utils/backup'
+import { shouldRestoreLastFile } from './utils/tabSession'
 
 import { SAMPLE_CONTENT } from './utils/sampleContent'
 import {
@@ -95,6 +97,8 @@ export default function App() {
     return [{ id: genTabId(), name: 'MarkDesk 示例文档.md', content: SAMPLE_CONTENT, isDirty: false }]
   })
   const [activeTabId, setActiveTabId] = useState(tabs[0].id)
+  const initialTabIdRef = useRef(tabs[0].id)
+  const allowStartupRestoreRef = useRef(true)
   const [closeConfirmVisible, setCloseConfirmVisible] = useState(false)
   const [closeSaving, setCloseSaving] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
@@ -117,6 +121,17 @@ export default function App() {
     setTabs((prev) => prev.map((t) => (t.id === activeTabId ? updater(t) : t)))
   }, [activeTabId])
 
+  const updateTabById = useCallback((tabId: string, updater: (tab: FileTab) => FileTab) => {
+    setTabs((previous) => {
+      const next = previous.map((tab) => tab.id === tabId ? updater(tab) : tab)
+      // Close requests read tabsRef outside React's render cycle. Keep it in
+      // sync immediately so closing right after Save As cannot see stale dirty
+      // state from the previous render.
+      tabsRef.current = next
+      return next
+    })
+  }, [])
+
   // ── History stack for undo/redo (per-tab) ──
   const historyMapRef = useRef<Map<string, { stack: string[]; index: number }>>(new Map())
   const [canUndo, setCanUndo] = useState(false)
@@ -132,11 +147,15 @@ export default function App() {
     return h
   }, [])
 
-  const updateHistoryFlags = useCallback(() => {
-    const h = getHistory(activeTabId)
+  const updateHistoryFlagsForTab = useCallback((tabId: string) => {
+    const h = getHistory(tabId)
     setCanUndo(h.index > 0)
     setCanRedo(h.index < h.stack.length - 1)
-  }, [getHistory, activeTabId])
+  }, [getHistory])
+
+  const updateHistoryFlags = useCallback(() => {
+    updateHistoryFlagsForTab(activeTabId)
+  }, [activeTabId, updateHistoryFlagsForTab])
 
   const pushHistory = useCallback((newContent: string) => {
     const h = getHistory(activeTabId)
@@ -818,12 +837,15 @@ export default function App() {
 
   // ── Tab operations ──
   const handleNewTab = useCallback(() => {
+    allowStartupRestoreRef.current = false
     const newTab: FileTab = { id: genTabId(), name: '未命名.md', content: '', isDirty: false }
-    setTabs((prev) => [...prev, newTab])
+    const nextTabs = [...tabsRef.current, newTab]
+    tabsRef.current = nextTabs
+    setTabs(nextTabs)
     setActiveTabId(newTab.id)
     historyMapRef.current.set(newTab.id, { stack: [''], index: 0 })
-    updateHistoryFlags()
-  }, [updateHistoryFlags])
+    updateHistoryFlagsForTab(newTab.id)
+  }, [updateHistoryFlagsForTab])
 
   const handleTabClose = useCallback((id: string) => {
     const currentTabs = tabsRef.current
@@ -838,7 +860,7 @@ export default function App() {
       historyMapRef.current.set(blankTab.id, { stack: [''], index: 0 })
       setTabs([blankTab])
       setActiveTabId(blankTab.id)
-      updateHistoryFlags()
+      updateHistoryFlagsForTab(blankTab.id)
       return
     }
     const idx = currentTabs.findIndex((t) => t.id === id)
@@ -853,15 +875,16 @@ export default function App() {
       if (!historyMapRef.current.has(newActive.id)) {
         historyMapRef.current.set(newActive.id, { stack: [newActive.content], index: 0 })
       }
-      updateHistoryFlags()
+      updateHistoryFlagsForTab(newActive.id)
     }
-  }, [activeTabId, updateHistoryFlags])
+  }, [activeTabId, updateHistoryFlagsForTab])
 
   const handleTabClick = useCallback((id: string) => {
+    allowStartupRestoreRef.current = false
     setActiveTabId(id)
     // Don't reset history — getHistory will lazily initialize if needed
-    updateHistoryFlags()
-  }, [updateHistoryFlags])
+    updateHistoryFlagsForTab(id)
+  }, [updateHistoryFlagsForTab])
 
   // ── File operations ──
   const addRecentFile = useCallback((name: string, path: string) => {
@@ -876,6 +899,7 @@ export default function App() {
   }, [handleNewTab])
 
   const handleOpenFile = useCallback(() => {
+    allowStartupRestoreRef.current = false
     const api = window.electronAPI
     if (api) {
       // Desktop app: use native dialog that returns a real file path
@@ -886,7 +910,7 @@ export default function App() {
         setTabs((prev) => [...prev, newTab])
         setActiveTabId(newTab.id)
         historyMapRef.current.set(newTab.id, { stack: [file.content], index: 0 })
-        updateHistoryFlags()
+        updateHistoryFlagsForTab(newTab.id)
         addRecentFile(name, file.path)
       })
       return
@@ -905,15 +929,16 @@ export default function App() {
         setTabs((prev) => [...prev, newTab])
         setActiveTabId(newTab.id)
         historyMapRef.current.set(newTab.id, { stack: [text], index: 0 })
-        updateHistoryFlags()
+        updateHistoryFlagsForTab(newTab.id)
         addRecentFile(file.name, (file as any).path || file.name)
       }
       reader.readAsText(file)
     }
     input.click()
-  }, [updateHistoryFlags, addRecentFile])
+  }, [updateHistoryFlagsForTab, addRecentFile])
 
   const handleDropFile = useCallback((file: File) => {
+    allowStartupRestoreRef.current = false
     const reader = new FileReader()
     reader.onload = () => {
       const text = reader.result as string
@@ -921,11 +946,11 @@ export default function App() {
       setTabs((prev) => [...prev, newTab])
       setActiveTabId(newTab.id)
       historyMapRef.current.set(newTab.id, { stack: [text], index: 0 })
-      updateHistoryFlags()
+      updateHistoryFlagsForTab(newTab.id)
       addRecentFile(file.name, (file as any).path || file.name)
     }
     reader.readAsText(file)
-  }, [updateHistoryFlags, addRecentFile])
+  }, [updateHistoryFlagsForTab, addRecentFile])
 
   const handlePasteImage = useCallback((dataUrl: string, name: string) => {
     const ta = textareaRef.current
@@ -954,9 +979,16 @@ export default function App() {
   const handleSave = useCallback(() => {
     const api = window.electronAPI
     if (api && activeTab.filePath) {
+      const targetTabId = activeTab.id
+      const savedContent = content
       // Desktop app with a known file path: write straight to disk
-      api.saveFile(activeTab.filePath, content).then((res) => {
-        if (res?.success) updateActiveTab((t) => ({ ...t, isDirty: false }))
+      api.saveFile(activeTab.filePath, savedContent).then((res) => {
+        if (res?.success) {
+          // Saving is asynchronous. Update the tab that initiated the save,
+          // not whichever tab happens to be active when the write completes.
+          // If it changed again during the write, keep its dirty marker.
+          updateTabById(targetTabId, (tab) => ({ ...tab, isDirty: tab.content !== savedContent }))
+        }
         else showNotice('error', tr(language, 'saveFailed'))
       })
       return
@@ -970,16 +1002,24 @@ export default function App() {
     a.click()
     URL.revokeObjectURL(url)
     updateActiveTab((t) => ({ ...t, isDirty: false }))
-  }, [content, activeTab.name, activeTab.filePath, updateActiveTab, language, showNotice])
+  }, [content, activeTab.id, activeTab.name, activeTab.filePath, updateActiveTab, updateTabById, language, showNotice])
 
   const handleSaveAs = useCallback(() => {
     const api = window.electronAPI
     if (api) {
+      const targetTabId = activeTab.id
+      const savedContent = content
       // Desktop app: native save-as dialog (writes the file)
-      api.saveFileAs(activeTab.name, content).then((res) => {
+      api.saveFileAs(activeTab.name, savedContent).then((res) => {
         const savedPath = res?.path
         if (savedPath) {
-          updateActiveTab((t) => ({ ...t, name: fileNameFromPath(savedPath), filePath: savedPath, isDirty: false }))
+          updateTabById(targetTabId, (tab) => ({
+            ...tab,
+            name: fileNameFromPath(savedPath),
+            filePath: savedPath,
+            isDirty: tab.content !== savedContent,
+          }))
+          addRecentFile(fileNameFromPath(savedPath), savedPath)
         } else if (res?.error) showNotice('error', tr(language, 'saveFailed'))
       })
       return
@@ -995,7 +1035,7 @@ export default function App() {
     a.click()
     URL.revokeObjectURL(url)
     updateActiveTab((t) => ({ ...t, name: fileName.endsWith('.md') ? fileName : fileName + '.md', isDirty: false }))
-  }, [content, activeTab.name, updateActiveTab, language, showNotice])
+  }, [content, activeTab.id, activeTab.name, addRecentFile, updateTabById, language, showNotice])
 
   const handleExportMD = handleSave
 
@@ -1024,12 +1064,13 @@ export default function App() {
       setActiveTabId(restored.id)
       historyMapRef.current.set(restored.id, { stack: [restored.content], index: 0 })
       if (backup.settings) setSettings((current) => ({ ...current, ...backup.settings } as Settings))
-      updateHistoryFlags()
+      allowStartupRestoreRef.current = false
+      updateHistoryFlagsForTab(restored.id)
       showNotice('success', tr(language, 'backupRestored'))
     } catch {
       showNotice('error', tr(language, 'backupInvalid'))
     }
-  }, [language, showNotice, updateHistoryFlags])
+  }, [language, showNotice, updateHistoryFlagsForTab])
 
   const handleImportBackup = useCallback(() => {
     const api = window.electronAPI
@@ -1223,8 +1264,9 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         }
         const existing = tabsRef.current.find((tab) => tab.filePath === file.path)
         if (existing) {
+          allowStartupRestoreRef.current = false
           setActiveTabId(existing.id)
-          updateHistoryFlags()
+          updateHistoryFlagsForTab(existing.id)
           return
         }
         const newTab: FileTab = { id: genTabId(), name: fileNameFromPath(file.path), content: file.content, isDirty: false, filePath: file.path }
@@ -1235,7 +1277,8 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         })
         setActiveTabId(newTab.id)
         historyMapRef.current.set(newTab.id, { stack: [file.content], index: 0 })
-        updateHistoryFlags()
+        allowStartupRestoreRef.current = false
+        updateHistoryFlagsForTab(newTab.id)
         addRecentFile(newTab.name, file.path)
       })
       return
@@ -1254,12 +1297,13 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         setTabs((prev) => [...prev, newTab])
         setActiveTabId(newTab.id)
         historyMapRef.current.set(newTab.id, { stack: [text], index: 0 })
-        updateHistoryFlags()
+        allowStartupRestoreRef.current = false
+        updateHistoryFlagsForTab(newTab.id)
       }
       r.readAsText(f)
     }
     input.click()
-  }, [updateHistoryFlags, addRecentFile, language, showNotice])
+  }, [updateHistoryFlagsForTab, addRecentFile, language, showNotice])
 
   const handleClearRecent = useCallback(() => {
     setRecentFiles([])
@@ -1394,7 +1438,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
       const existing = tabsRef.current.find((tab) => tab.filePath?.toLocaleLowerCase() === pathKey)
       if (existing) {
         setActiveTabId(existing.id)
-        updateHistoryFlags()
+        updateHistoryFlagsForTab(existing.id)
         addRecentFile(name, file.path)
         localStorage.setItem(LAST_OPEN_FILE_KEY, file.path)
         return
@@ -1408,12 +1452,13 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
       setTabs(next)
       setActiveTabId(newTab.id)
       historyMapRef.current.set(newTab.id, { stack: [file.content], index: 0 })
-      updateHistoryFlags()
+      updateHistoryFlagsForTab(newTab.id)
       addRecentFile(name, file.path)
       localStorage.setItem(LAST_OPEN_FILE_KEY, file.path)
     }
     const unsubscribe = api.onFileOpen((file) => {
       openedFromOs = true
+      allowStartupRestoreRef.current = false
       openFile(file)
     })
     api.notifyReady()
@@ -1421,7 +1466,12 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
     // Give a file supplied by Windows/file association priority. Otherwise,
     // restore the last document that was active in the previous app session.
     const restoreTimer = window.setTimeout(async () => {
-      if (openedFromOs) return
+      if (!shouldRestoreLastFile({
+        openedFromOs,
+        restoreAllowed: allowStartupRestoreRef.current,
+        initialTabId: initialTabIdRef.current,
+        tabs: tabsRef.current,
+      })) return
       const lastPath = localStorage.getItem(LAST_OPEN_FILE_KEY)
       if (!lastPath) return
       const file = await api.openRecentFile(lastPath)
@@ -1433,7 +1483,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
       window.clearTimeout(restoreTimer)
       unsubscribe()
     }
-  }, [updateHistoryFlags, addRecentFile])
+  }, [updateHistoryFlagsForTab, addRecentFile])
 
   // ── Render ──
   if (zenMode) {
@@ -1673,8 +1723,13 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
           <div className="w-[420px] rounded-xl bg-white p-6 shadow-2xl dark:bg-dark-panel">
             <h2 id="close-confirm-title" className="text-lg font-semibold text-notion-text dark:text-dark-text">保存更改后退出？</h2>
             <p className="mt-2 text-sm text-notion-text-secondary dark:text-dark-text-secondary">当前有未保存的文档。保存后退出可避免丢失修改。</p>
+            <ul className="mt-3 max-h-28 overflow-auto rounded-md bg-gray-50 px-3 py-2 text-sm text-notion-text-secondary dark:bg-white/5 dark:text-dark-text-secondary">
+              {tabs.filter((tab) => tab.isDirty).map((tab) => (
+                <li key={tab.id} className="truncate">• {tab.name}</li>
+              ))}
+            </ul>
             <div className="mt-6 flex justify-end gap-3">
-              <button className="rounded-md px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/10" disabled={closeSaving} onClick={() => setCloseConfirmVisible(false)}>取消</button>
+              <button className="rounded-md px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/10" disabled={closeSaving} onClick={() => { setCloseConfirmVisible(false); window.electronAPI?.cancelClose() }}>取消</button>
               <button className="rounded-md px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/10" disabled={closeSaving} onClick={() => window.electronAPI?.confirmClose()}>不保存退出</button>
               <button className="rounded-md bg-notion-blue px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:opacity-60" disabled={closeSaving} onClick={saveAllAndClose}>{closeSaving ? '正在保存…' : '保存并退出'}</button>
             </div>

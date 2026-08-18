@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useMemo } from 'react'
 import type { Settings } from '../types'
+import { normalizeClipboardPlainText } from '../utils/clipboardMarkdown'
 
 interface EditorProps {
   content: string
@@ -244,7 +245,7 @@ export const Editor: React.FC<EditorProps> = ({
   }
 
   // Handle paste
-  const handlePaste = (e: React.ClipboardEvent) => {
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData?.items
     if (!items) return
 
@@ -262,6 +263,21 @@ export const Editor: React.FC<EditorProps> = ({
         reader.readAsDataURL(blob)
         return
       }
+    }
+
+    const plainText = e.clipboardData?.getData('text/plain') || ''
+    const normalizedText = normalizeClipboardPlainText(plainText)
+    if (plainText && normalizedText !== plainText) {
+      e.preventDefault()
+      const ta = e.currentTarget
+      const start = ta.selectionStart
+      const end = ta.selectionEnd
+      const newValue = ta.value.slice(0, start) + normalizedText + ta.value.slice(end)
+      onChange(newValue)
+      requestAnimationFrame(() => {
+        ta.selectionStart = ta.selectionEnd = start + normalizedText.length
+        handleSelect()
+      })
     }
   }
 

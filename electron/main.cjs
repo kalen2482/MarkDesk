@@ -129,6 +129,12 @@ ipcMain.on('window:toggleMaximize', () => {
   else mainWindow.maximize()
 })
 ipcMain.on('window:close', () => mainWindow?.close())
+ipcMain.on('app:cancel-close', () => {
+  // The renderer dismissed its save-confirmation dialog. Permit the next OS
+  // close request to notify it again instead of leaving the window stuck in a
+  // pending-close state.
+  closeRequestPending = false
+})
 ipcMain.on('app:confirm-close', () => {
   if (!mainWindow) return
   allowWindowClose = true

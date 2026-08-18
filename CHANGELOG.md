@@ -2,6 +2,30 @@
 
 All notable changes to MarkDesk are documented here.
 
+## [0.2.6] - 2026-08-18
+
+### 中文
+
+#### 修复与改进
+
+- 修复通过“新建文件”或标签栏“+”创建 Markdown 标签后，应用又自动跳回先前文件、导致新标签无法持续选中和编辑的问题。
+- 新建标签、选择标签、打开文件及恢复备份时会立即取消尚未完成的启动文件恢复，避免延迟任务抢占当前活动标签。
+- 修正切换标签后的撤销与重做状态，使工具栏状态与当前文档保持一致。
+- 新增标签会话恢复测试，覆盖有内容的新标签、空白新标签和应用启动场景。
+- 修复部分应用复制 Markdown 时以 `{ "text": "..." }` 形式封装内容，导致 `\\n` 被当作普通文字显示、可视化预览无法正确换行的问题。源码区和可视化区现在会一致地解包这类多行文本剪贴板内容；常规 JSON 文档仍保持原样。
+- 修复退出保存提示点击“取消”后，后续关闭请求不再响应、程序无法正常关闭的问题。
+
+### English
+
+#### Fixed and improved
+
+- Fixed an issue where creating a Markdown tab from New File or the tab-bar plus button could immediately switch back to the previously active file, preventing the new tab from staying selected and editable.
+- Creating or selecting a tab, opening a file, and restoring a backup now cancel any pending startup file restoration so delayed work cannot steal focus from the active tab.
+- Corrected undo and redo state updates after switching tabs so the toolbar always reflects the active document.
+- Added tab-session restoration tests covering populated new tabs, blank new tabs, and normal app startup.
+- Fixed multiline Markdown clipboard content wrapped as `{ "text": "..." }` by some applications being pasted literally, leaving `\\n` visible and preventing correct visual rendering. Source and visual editors now unwrap this narrow clipboard envelope consistently while regular JSON documents remain unchanged.
+- Fixed the application no longer responding to close requests after Cancel was clicked in the unsaved-changes dialog.
+
 ## [0.2.5] - 2026-08-13
 
 ### 中文
