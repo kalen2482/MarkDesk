@@ -322,19 +322,13 @@ export function rtTextColor(color: string) {
     // No selection: insert placeholder text with color
     insertHtmlAtCursor(`<span style="color: ${color}">彩色文字</span>`)
   } else {
-    const savedRange = saveSelection()
-    document.execCommand('foreColor', false, color)
+    // Chromium's foreColor command may emit a legacy <font color="..."> tag.
+    // Wrap explicitly so htmlToMarkdown can persist the color in the document.
+    const newRange = wrapSelectionWithStyle(`color: ${color}`)
     const preview = document.querySelector('.md-preview') as HTMLElement
     if (preview) preview.dispatchEvent(new Event('input', { bubbles: true }))
-    restoreSelection(savedRange)
+    restoreSelection(newRange)
   }
-}
-
-// Save/restore selection to preserve it across operations
-function saveSelection(): Range | null {
-  const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0) return null
-  return sel.getRangeAt(0).cloneRange()
 }
 
 function restoreSelection(range: Range | null) {
@@ -415,14 +409,10 @@ export function rtBgColor(color: string) {
     // No selection: insert placeholder text with background color
     insertHtmlAtCursor(`<span style="background-color: ${color}">背景色文字</span>`)
   } else {
-    const savedRange = saveSelection()
-    // Try hiliteColor first, fallback to backColor (browser compatibility)
-    if (!document.execCommand('hiliteColor', false, color)) {
-      document.execCommand('backColor', false, color)
-    }
+    const newRange = wrapSelectionWithStyle(`background-color: ${color}`)
     const preview = document.querySelector('.md-preview') as HTMLElement
     if (preview) preview.dispatchEvent(new Event('input', { bubbles: true }))
-    restoreSelection(savedRange)
+    restoreSelection(newRange)
   }
 }
 

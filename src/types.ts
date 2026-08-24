@@ -1,4 +1,5 @@
 export type DisplayMode = 'edit' | 'preview' | 'split' | 'visual'
+export type DefaultDisplayMode = DisplayMode | 'last'
 
 export type ThemeMode = 'light' | 'dark'
 
@@ -41,7 +42,7 @@ export interface Settings {
   syncScroll: boolean
   lineNumbers: boolean
   spellCheck: boolean
-  defaultDisplayMode: DisplayMode
+  defaultDisplayMode: DefaultDisplayMode
 }
 
 export interface RecentFile {

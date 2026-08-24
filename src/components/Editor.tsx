@@ -312,7 +312,7 @@ export const Editor: React.FC<EditorProps> = ({
         <div
           ref={lineNumbersRef}
           className="flex-shrink-0 w-12 py-4 text-right overflow-hidden bg-white dark:bg-dark-bg select-none"
-          style={{ fontSize: `${settings.fontSize - 1}px`, lineHeight: '1.6' }}
+          style={{ fontSize: `${settings.fontSize}px`, lineHeight: '1.6', fontFamily: settings.fontFamily }}
           aria-hidden="true"
         >
           {lineNumbers.map((n) => (

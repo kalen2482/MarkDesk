@@ -3,6 +3,7 @@ import { gfmHeadingId } from 'marked-gfm-heading-id'
 import DOMPurify from 'dompurify'
 import katex from 'katex'
 import type { HeadingNode } from '../types'
+import { protectIncompleteSetextUnderline } from './editorInput'
 
 // ── Marked configuration ──
 marked.use(
@@ -72,7 +73,7 @@ export function renderMarkdown(content: string, sourcePath?: string): string {
     return key
   })
   const footnotes: Map<string, string> = new Map()
-  let processed = embeddedImageProcessed.replace(/^\[(\^\w+)\]:\s*(.+)$/gm, (_match, id, text) => {
+  let processed = protectIncompleteSetextUnderline(embeddedImageProcessed).replace(/^\[(\^\w+)\]:\s*(.+)$/gm, (_match, id, text) => {
     footnotes.set(id, text)
     return ''
   })

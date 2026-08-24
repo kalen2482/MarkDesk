@@ -160,29 +160,39 @@ turndown.addRule('color-span', {
     const style = el.getAttribute('style') || ''
     return style.includes('color:') || style.includes('background-color:') || style.includes('font-size:')
   },
-  replacement: (_content, node) => {
+  replacement: (content, node) => {
     const el = node as HTMLElement
     // Clean up the style attribute to only keep relevant properties
     const style = el.getAttribute('style') || ''
     const cleanParts: string[] = []
     if (style.includes('color:') && !style.includes('background-color:')) {
-      const match = style.match(/color:	*([^;]+)/)
+      const match = style.match(/color:\s*([^;]+)/)
       if (match) cleanParts.push(`color: ${match[1].trim()}`)
     }
     if (style.includes('color:') && style.includes('background-color:')) {
-      const colorMatch = style.match(/(?:^|;)	*color:	*([^;]+)/)
+      const colorMatch = style.match(/(?:^|;)\s*color:\s*([^;]+)/)
       if (colorMatch) cleanParts.push(`color: ${colorMatch[1].trim()}`)
     }
     if (style.includes('background-color:')) {
-      const match = style.match(/background-color:	*([^;]+)/)
+      const match = style.match(/background-color:\s*([^;]+)/)
       if (match) cleanParts.push(`background-color: ${match[1].trim()}`)
     }
     if (style.includes('font-size:')) {
-      const match = style.match(/font-size:	*([^;]+)/)
+      const match = style.match(/font-size:\s*([^;]+)/)
       if (match) cleanParts.push(`font-size: ${match[1].trim()}`)
     }
     const cleanStyle = cleanParts.join('; ')
-    return `<span style="${cleanStyle}">${el.textContent || ''}</span>`
+    return cleanStyle ? `<span style="${cleanStyle}">${content}</span>` : content
+  },
+})
+
+// Chromium may produce this legacy element for foreColor. Normalize it so
+// documents edited by older builds also retain their color when next saved.
+turndown.addRule('legacy-font-color', {
+  filter: (node) => node.nodeName === 'FONT' && Boolean((node as HTMLElement).getAttribute('color')),
+  replacement: (content, node) => {
+    const color = (node as HTMLElement).getAttribute('color') || ''
+    return `<span style="color: ${color}">${content}</span>`
   },
 })
 

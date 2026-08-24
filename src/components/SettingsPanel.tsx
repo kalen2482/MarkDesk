@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import type { AppLanguage, Settings, DisplayMode } from '../types'
+import type { AppLanguage, Settings, DefaultDisplayMode } from '../types'
 import { useI18n } from '../i18n'
 
 interface SettingsPanelProps {
@@ -99,13 +99,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ visible, settings,
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm text-near-black dark:text-dark-text">默认打开模式</div>
-                <div className="text-xs text-warm-gray-300 mt-0.5">启动时默认显示的编辑模式</div>
+                <div className="text-xs text-warm-gray-300 mt-0.5">
+                  {local.defaultDisplayMode === 'last' ? t('启动时恢复上次关闭前的编辑模式') : t('启动时默认显示的编辑模式')}
+                </div>
               </div>
               <div className="flex items-center bg-warm-white dark:bg-dark-bg rounded-notion p-0.5">
                 {([
-                  { mode: 'edit' as DisplayMode, label: '源码' },
-                  { mode: 'split' as DisplayMode, label: '分栏' },
-                  { mode: 'visual' as DisplayMode, label: '可视化' },
+                  { mode: 'edit' as DefaultDisplayMode, label: '源码' },
+                  { mode: 'split' as DefaultDisplayMode, label: '分栏' },
+                  { mode: 'visual' as DefaultDisplayMode, label: '可视化' },
+                  { mode: 'last' as DefaultDisplayMode, label: '上次模式' },
                 ]).map(({ mode, label }) => (
                   <button
                     key={mode}
@@ -118,7 +121,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ visible, settings,
                     role="radio"
                     aria-checked={local.defaultDisplayMode === mode}
                   >
-                    {label}
+                    {mode === 'last' ? t(label) : label}
                   </button>
                 ))}
               </div>

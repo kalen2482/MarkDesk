@@ -68,7 +68,7 @@ const DEFAULT_SETTINGS: Settings = {
   fontSize: 14,
   fontFamily: "'JetBrains Mono', 'Consolas', monospace",
   tabSize: 2,
-  wordWrap: false,
+  wordWrap: true,
   syncScroll: true,
   lineNumbers: true,
   spellCheck: false,
@@ -217,6 +217,10 @@ export default function App() {
       const saved = localStorage.getItem('markdesk-settings')
       if (saved) {
         const s = JSON.parse(saved)
+        if (s.defaultDisplayMode === 'last') {
+          const lastMode = localStorage.getItem('markdesk-last-display-mode')
+          return lastMode === 'edit' || lastMode === 'split' || lastMode === 'visual' ? lastMode : 'split'
+        }
         if (s.defaultDisplayMode) {
           // Normalize: 'preview' mode was removed, treat as 'visual'
           return s.defaultDisplayMode === 'preview' ? 'visual' : s.defaultDisplayMode
@@ -277,6 +281,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('markdesk-settings', JSON.stringify(settings))
   }, [settings])
+
+  useEffect(() => {
+    localStorage.setItem('markdesk-last-display-mode', displayMode)
+  }, [displayMode])
 
   // ── Refs ──
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -838,6 +846,8 @@ export default function App() {
   // ── Tab operations ──
   const handleNewTab = useCallback(() => {
     allowStartupRestoreRef.current = false
+    syncSourceRef.current = null
+    setSyncSource(null)
     const newTab: FileTab = { id: genTabId(), name: '未命名.md', content: '', isDirty: false }
     const nextTabs = [...tabsRef.current, newTab]
     tabsRef.current = nextTabs
@@ -881,10 +891,16 @@ export default function App() {
 
   const handleTabClick = useCallback((id: string) => {
     allowStartupRestoreRef.current = false
+    syncSourceRef.current = null
+    setSyncSource(null)
     setActiveTabId(id)
     // Don't reset history — getHistory will lazily initialize if needed
     updateHistoryFlagsForTab(id)
   }, [updateHistoryFlagsForTab])
+
+  const handleTabRename = useCallback((id: string, name: string) => {
+    updateTabById(id, (tab) => tab.filePath ? tab : { ...tab, name })
+  }, [updateTabById])
 
   // ── File operations ──
   const addRecentFile = useCallback((name: string, path: string) => {
@@ -976,24 +992,50 @@ export default function App() {
     })
   }, [pushHistory, updateActiveTab, content])
 
+  const saveAsPendingRef = useRef<Set<string>>(new Set())
+
+  const saveDesktopTabAs = useCallback(async (tab: FileTab, savedContent: string) => {
+    const api = window.electronAPI
+    if (!api || saveAsPendingRef.current.has(tab.id)) return
+    saveAsPendingRef.current.add(tab.id)
+    try {
+      const res = await api.saveFileAs(tab.name, savedContent)
+      const savedPath = res?.path
+      if (savedPath) {
+        const savedName = fileNameFromPath(savedPath)
+        updateTabById(tab.id, (current) => ({
+          ...current,
+          name: savedName,
+          filePath: savedPath,
+          isDirty: current.content !== savedContent,
+        }))
+        addRecentFile(savedName, savedPath)
+      } else if (res?.error) {
+        showNotice('error', tr(language, 'saveFailed'))
+      }
+    } finally {
+      saveAsPendingRef.current.delete(tab.id)
+    }
+  }, [addRecentFile, language, showNotice, updateTabById])
+
   const handleSave = useCallback(() => {
     const api = window.electronAPI
-    if (api && activeTab.filePath) {
+    if (api) {
+      if (!activeTab.filePath) {
+        void saveDesktopTabAs(activeTab, content)
+        return
+      }
       const targetTabId = activeTab.id
       const savedContent = content
-      // Desktop app with a known file path: write straight to disk
       api.saveFile(activeTab.filePath, savedContent).then((res) => {
         if (res?.success) {
-          // Saving is asynchronous. Update the tab that initiated the save,
-          // not whichever tab happens to be active when the write completes.
-          // If it changed again during the write, keep its dirty marker.
           updateTabById(targetTabId, (tab) => ({ ...tab, isDirty: tab.content !== savedContent }))
+        } else {
+          showNotice('error', tr(language, 'saveFailed'))
         }
-        else showNotice('error', tr(language, 'saveFailed'))
       })
       return
     }
-    // Browser fallback / unsaved tab: download
     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -1001,30 +1043,15 @@ export default function App() {
     a.download = activeTab.name
     a.click()
     URL.revokeObjectURL(url)
-    updateActiveTab((t) => ({ ...t, isDirty: false }))
-  }, [content, activeTab.id, activeTab.name, activeTab.filePath, updateActiveTab, updateTabById, language, showNotice])
+    updateActiveTab((tab) => ({ ...tab, isDirty: false }))
+  }, [activeTab, content, language, saveDesktopTabAs, showNotice, updateActiveTab, updateTabById])
 
   const handleSaveAs = useCallback(() => {
     const api = window.electronAPI
     if (api) {
-      const targetTabId = activeTab.id
-      const savedContent = content
-      // Desktop app: native save-as dialog (writes the file)
-      api.saveFileAs(activeTab.name, savedContent).then((res) => {
-        const savedPath = res?.path
-        if (savedPath) {
-          updateTabById(targetTabId, (tab) => ({
-            ...tab,
-            name: fileNameFromPath(savedPath),
-            filePath: savedPath,
-            isDirty: tab.content !== savedContent,
-          }))
-          addRecentFile(fileNameFromPath(savedPath), savedPath)
-        } else if (res?.error) showNotice('error', tr(language, 'saveFailed'))
-      })
+      void saveDesktopTabAs(activeTab, content)
       return
     }
-    // Browser fallback
     const fileName = prompt('请输入文件名', activeTab.name)
     if (!fileName) return
     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
@@ -1034,8 +1061,8 @@ export default function App() {
     a.download = fileName.endsWith('.md') ? fileName : fileName + '.md'
     a.click()
     URL.revokeObjectURL(url)
-    updateActiveTab((t) => ({ ...t, name: fileName.endsWith('.md') ? fileName : fileName + '.md', isDirty: false }))
-  }, [content, activeTab.id, activeTab.name, addRecentFile, updateTabById, language, showNotice])
+    updateActiveTab((tab) => ({ ...tab, name: fileName.endsWith('.md') ? fileName : fileName + '.md', isDirty: false }))
+  }, [activeTab, content, saveDesktopTabAs, updateActiveTab])
 
   const handleExportMD = handleSave
 
@@ -1518,6 +1545,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
           {(displayMode === 'split' || displayMode === 'visual') && (
             <div className="h-full overflow-hidden" style={{ width: displayMode === 'split' ? `${(1 - splitRatio) * 100}%` : '100%' }}>
               <Preview
+                key={activeTab.id}
                 content={content}
                 sourcePath={activeTab.filePath}
                 scrollSync={scrollSync}
@@ -1599,6 +1627,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         activeTabId={activeTabId}
         onTabClick={handleTabClick}
         onTabClose={handleTabClose}
+        onTabRename={handleTabRename}
         onNewTab={handleNewTab}
       />
 
@@ -1670,6 +1699,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
           {(displayMode === 'split' || displayMode === 'visual') && (
             <div className={displayMode === 'split' ? 'flex-1 overflow-hidden' : 'w-full h-full overflow-hidden'}>
               <Preview
+                key={activeTab.id}
                 content={content}
                 sourcePath={activeTab.filePath}
                 scrollSync={scrollSync}

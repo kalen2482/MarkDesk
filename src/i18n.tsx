@@ -103,6 +103,8 @@ const uiText: Record<string, Partial<Record<AppLanguage, string>>> = {
   '滚动同步': { en: 'Sync scrolling', ja: 'スクロール同期', ko: '스크롤 동기화', fr: 'Synchroniser le défilement', de: 'Scrollen synchronisieren', es: 'Sincronizar desplazamiento' },
   '默认打开模式': { en: 'Default view', ja: '既定の表示モード', ko: '기본 보기', fr: "Vue par défaut", de: 'Standardansicht', es: 'Vista predeterminada' },
   '启动时默认显示的编辑模式': { en: 'The editing view shown when MarkDesk starts', ja: '起動時に表示する編集モード', ko: 'MarkDesk 시작 시 표시할 편집 보기', fr: 'Vue affichée au démarrage de MarkDesk', de: 'Beim Start angezeigte Bearbeitungsansicht', es: 'Vista mostrada al iniciar MarkDesk' },
+  '上次模式': { en: 'Last used', ja: '前回のモード', ko: '마지막 모드', fr: 'Dernier mode', de: 'Letzter Modus', es: 'Último modo' },
+  '启动时恢复上次关闭前的编辑模式': { en: 'Restore the editing view used before MarkDesk was last closed', ja: '前回終了時の編集モードを復元します', ko: '마지막 종료 전에 사용한 편집 보기를 복원합니다', fr: 'Restaurer la vue utilisée avant la dernière fermeture', de: 'Die vor dem letzten Schließen verwendete Ansicht wiederherstellen', es: 'Restaurar la vista usada antes del último cierre' },
   'Tab 宽度': { en: 'Tab width', ja: 'タブ幅', ko: '탭 너비', fr: 'Largeur de tabulation', de: 'Tabulatorbreite', es: 'Ancho de tabulación' },
   '空格': { en: 'spaces', ja: 'スペース', ko: '공백', fr: 'espaces', de: 'Leerzeichen', es: 'espacios' },
   '长行自动折行显示': { en: 'Wrap long lines automatically', ja: '長い行を自動で折り返す', ko: '긴 줄 자동 줄바꿈', fr: 'Retourner automatiquement les longues lignes', de: 'Lange Zeilen automatisch umbrechen', es: 'Ajustar líneas largas automáticamente' },

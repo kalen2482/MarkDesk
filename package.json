@@ -1,7 +1,7 @@
 {
   "name": "markdesk",
   "private": true,
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "A lightweight, local-first Markdown editor with source, split, and visual editing modes.",
   "author": "Apple",
   "homepage": "https://github.com/kalen2482/MarkDesk",
