@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from 'react'
+import React, { useRef, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import type { Settings } from '../types'
 import { normalizeClipboardPlainText } from '../utils/clipboardMarkdown'
 
@@ -31,7 +31,9 @@ export const Editor: React.FC<EditorProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const lineNumbersRef = useRef<HTMLDivElement>(null)
+  const wrapMeasureRef = useRef<HTMLDivElement>(null)
   const syncingScrollRef = useRef(false)
+  const [lineHeights, setLineHeights] = useState<number[]>([])
 
   // Apply external scroll sync
   useEffect(() => {
@@ -305,8 +307,31 @@ export const Editor: React.FC<EditorProps> = ({
     return Array.from({ length: count }, (_, i) => i + 1)
   }, [content])
 
+  // A wrapped logical line occupies more than one visual row. Mirror the
+  // textarea's text box so the gutter keeps each number beside its real line.
+  useLayoutEffect(() => {
+    if (!settings.lineNumbers) return
+    const mirror = wrapMeasureRef.current
+    const textarea = textareaRef.current
+    if (!mirror || !textarea) return
+
+    const measure = () => {
+      const next = Array.from(mirror.children, (child) => (child as HTMLElement).getBoundingClientRect().height)
+      setLineHeights((current) => (
+        current.length === next.length && current.every((height, index) => Math.abs(height - next[index]) < 0.5)
+          ? current
+          : next
+      ))
+    }
+
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(textarea)
+    return () => observer.disconnect()
+  }, [content, settings.fontFamily, settings.fontSize, settings.lineNumbers, settings.tabSize, settings.wordWrap, textareaRef])
+
   return (
-    <div ref={containerRef} className="flex h-full bg-white dark:bg-dark-bg overflow-hidden">
+    <div ref={containerRef} className="relative flex h-full bg-white dark:bg-dark-bg overflow-hidden">
       {/* Line numbers */}
       {settings.lineNumbers && (
         <div
@@ -316,9 +341,36 @@ export const Editor: React.FC<EditorProps> = ({
           aria-hidden="true"
         >
           {lineNumbers.map((n) => (
-            <div key={n} className="text-warm-gray-300 dark:text-dark-text-muted pr-3">
+            <div
+              key={n}
+              className="text-warm-gray-300 dark:text-dark-text-muted pr-3"
+              style={{ height: lineHeights[n - 1] || `${settings.fontSize * 1.6}px` }}
+            >
               {n}
             </div>
+          ))}
+        </div>
+      )}
+
+      {settings.lineNumbers && (
+        <div
+          ref={wrapMeasureRef}
+          className="invisible pointer-events-none absolute top-0 right-0 overflow-y-scroll p-4"
+          style={{
+            left: '3rem',
+            height: '100%',
+            fontSize: `${settings.fontSize}px`,
+            lineHeight: '1.6',
+            fontFamily: settings.fontFamily,
+            tabSize: settings.tabSize,
+            whiteSpace: settings.wordWrap ? 'pre-wrap' : 'pre',
+            wordBreak: settings.wordWrap ? 'break-all' : 'normal',
+            overflowWrap: settings.wordWrap ? 'break-word' : 'normal',
+          }}
+          aria-hidden="true"
+        >
+          {content.split('\n').map((line, index) => (
+            <div key={index} style={{ minHeight: `${settings.fontSize * 1.6}px` }}>{line || '\u200b'}</div>
           ))}
         </div>
       )}
@@ -338,6 +390,7 @@ export const Editor: React.FC<EditorProps> = ({
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onContextMenu={onContextMenu}
+        wrap={settings.wordWrap ? 'soft' : 'off'}
         className="flex-1 p-4 bg-transparent resize-none outline-none font-mono text-sm leading-relaxed text-near-black dark:text-dark-text"
         style={{
           fontSize: `${settings.fontSize}px`,
@@ -347,6 +400,7 @@ export const Editor: React.FC<EditorProps> = ({
           whiteSpace: settings.wordWrap ? 'pre-wrap' : 'pre',
           wordBreak: settings.wordWrap ? 'break-all' : 'normal',
           overflowWrap: settings.wordWrap ? 'break-word' : 'normal',
+          overflowX: settings.wordWrap ? 'hidden' : 'auto',
         }}
         spellCheck={settings.spellCheck}
         placeholder="开始输入 Markdown..."

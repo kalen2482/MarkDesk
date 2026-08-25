@@ -8,6 +8,28 @@
   word-wrap: break-word;
 }
 
+/* Responsive document canvas. Visual mode can use a wide desktop display,
+   while split mode fills its pane without forcing excessively long lines. */
+.md-preview-page {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 32px clamp(24px, 4vw, 64px);
+}
+
+.md-preview-layout-split {
+  max-width: 1100px;
+}
+
+.md-preview-layout-visual {
+  max-width: 1440px;
+}
+
+@media (max-width: 900px) {
+  .md-preview-page {
+    padding: 24px;
+  }
+}
+
 .dark .md-preview {
   color: #d4d4d4;
 }

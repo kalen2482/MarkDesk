@@ -134,6 +134,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const fontSizeRef = useRef<HTMLDivElement>(null)
   const savedPreviewRangeRef = useRef<Range | null>(null)
   const savedSourceSelectionRef = useRef<{ start: number; end: number } | null>(null)
+  const toolbarFitRunRef = useRef(0)
 
   const rememberEditorSelection = () => {
     savedPreviewRangeRef.current = capturePreviewRange()
@@ -170,10 +171,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     if (!toolbar) return
     let frame = 0
     const fit = () => {
+      const fitRun = ++toolbarFitRunRef.current
       cancelAnimationFrame(frame)
       const measure = (candidate: ToolbarDensity) => {
         setDensity(candidate)
         frame = requestAnimationFrame(() => {
+          if (fitRun !== toolbarFitRunRef.current) return
           const primary = primaryToolbarRef.current
           if (!primary || primary.scrollWidth <= primary.clientWidth + 1) return
           const next = nextToolbarDensity(candidate, true)
@@ -185,8 +188,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     const observer = new ResizeObserver(fit)
     observer.observe(toolbar)
     fit()
-    return () => { cancelAnimationFrame(frame); observer.disconnect() }
-  }, [])
+    return () => {
+      toolbarFitRunRef.current += 1
+      cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
+  }, [language])
 
   useEffect(() => {
     if (density === 'full') {
@@ -717,6 +724,7 @@ interface MorePanelProps extends InsertPanelProps {
 /** Overflow menu used when the measured toolbar width is constrained. */
 const MorePanel: React.FC<MorePanelProps> = ({ density, onAction, onSearch, onShortcutHelp, onSettings, onAbout, onEmoji, onClose = () => {}, restoreFocus }) => {
   const { language } = useI18n()
+  const [moreColorPanel, setMoreColorPanel] = useState<null | 'text' | 'bg'>(null)
   const hidden = hiddenToolbarGroups(density)
   const compactOptionalHidden = hidden.includes('compactOptional')
   const secondaryHidden = hidden.includes('secondary')
@@ -762,14 +770,18 @@ const MorePanel: React.FC<MorePanelProps> = ({ density, onAction, onSearch, onSh
     <InsertDivider />
     <InsertSection title="排版">
       <InsertItem icon={<FormulaIcon size={14} />} label="公式" onClick={() => onAction('formula')} />
-      <label className="flex items-center w-full px-3 py-1.5 text-sm text-near-black dark:text-dark-text hover:bg-warm-white dark:hover:bg-white/5 transition-colors gap-2.5 cursor-pointer" role="menuitem" onMouseDown={preventBlur}>
-        <ColorIcon size={14} /><span className="flex-1">{translateUiText(language, '字体颜色')}</span>
-        <input type="color" className="w-6 h-6" onChange={(event) => onAction('text-color', event.target.value)} />
-      </label>
-      <label className="flex items-center w-full px-3 py-1.5 text-sm text-near-black dark:text-dark-text hover:bg-warm-white dark:hover:bg-white/5 transition-colors gap-2.5 cursor-pointer" role="menuitem" onMouseDown={preventBlur}>
-        <BgColorIcon size={14} /><span className="flex-1">{translateUiText(language, '背景颜色')}</span>
-        <input type="color" className="w-6 h-6" onChange={(event) => onAction('bg-color', event.target.value)} />
-      </label>
+      <InsertItem icon={<ColorIcon size={14} />} label="字体颜色" onClick={() => setMoreColorPanel(moreColorPanel === 'text' ? null : 'text')} />
+      {moreColorPanel === 'text' && (
+        <MoreColorPalette
+          colors={PRESET_COLORS}
+          onSelect={(color) => onAction('text-color', color)}
+          onClear={() => onAction('text-color', '')}
+        />
+      )}
+      <InsertItem icon={<BgColorIcon size={14} />} label="背景颜色" onClick={() => setMoreColorPanel(moreColorPanel === 'bg' ? null : 'bg')} />
+      {moreColorPanel === 'bg' && (
+        <MoreColorPalette colors={PRESET_BG_COLORS} onSelect={(color) => onAction('bg-color', color)} />
+      )}
     </InsertSection>
     <InsertDivider />
     <InsertSection title="工具">
@@ -782,6 +794,40 @@ const MorePanel: React.FC<MorePanelProps> = ({ density, onAction, onSearch, onSh
   </div>
   )
 }
+
+const MoreColorPalette: React.FC<{
+  colors: string[]
+  onSelect: (color: string) => void
+  onClear?: () => void
+}> = ({ colors, onSelect, onClear }) => (
+  <div className="mx-3 mb-2 rounded-notion border border-whisper-border dark:border-dark-border bg-warm-white/60 dark:bg-white/5 p-2" role="group">
+    <div className="grid grid-cols-8 gap-1.5">
+      {colors.map((color) => (
+        <button
+          key={color}
+          type="button"
+          className="h-5 w-5 rounded border border-whisper-border dark:border-dark-border hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-notion-blue transition-transform"
+          style={{ backgroundColor: color }}
+          onMouseDown={preventBlur}
+          onClick={() => onSelect(color)}
+          aria-label={color}
+          role="menuitem"
+        />
+      ))}
+    </div>
+    {onClear && (
+      <button
+        type="button"
+        className="mt-2 w-full text-left text-xs text-warm-gray-400 hover:text-near-black dark:hover:text-dark-text"
+        onMouseDown={preventBlur}
+        onClick={onClear}
+        role="menuitem"
+      >
+        清除颜色
+      </button>
+    )}
+  </div>
+)
 
 const InsertPanel: React.FC<InsertPanelProps> = ({ onAction, onClose = () => {}, restoreFocus }) => {
   const { language } = useI18n()

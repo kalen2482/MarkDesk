@@ -1546,6 +1546,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
             <div className="h-full overflow-hidden" style={{ width: displayMode === 'split' ? `${(1 - splitRatio) * 100}%` : '100%' }}>
               <Preview
                 key={activeTab.id}
+                layoutMode={displayMode === 'split' ? 'split' : 'visual'}
                 content={content}
                 sourcePath={activeTab.filePath}
                 scrollSync={scrollSync}
@@ -1700,6 +1701,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
             <div className={displayMode === 'split' ? 'flex-1 overflow-hidden' : 'w-full h-full overflow-hidden'}>
               <Preview
                 key={activeTab.id}
+                layoutMode={displayMode === 'split' ? 'split' : 'visual'}
                 content={content}
                 sourcePath={activeTab.filePath}
                 scrollSync={scrollSync}

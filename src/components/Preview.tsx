@@ -27,6 +27,8 @@ interface PreviewProps {
   syncSource?: 'editor' | 'preview' | null
   /** Absolute path of the open Markdown document, for resolving local images. */
   sourcePath?: string
+  /** Current workspace layout, used to choose a responsive reading width. */
+  layoutMode?: 'split' | 'visual'
 }
 
 export const Preview: React.FC<PreviewProps> = ({
@@ -39,6 +41,7 @@ export const Preview: React.FC<PreviewProps> = ({
   onHtmlChange,
   syncSource,
   sourcePath,
+  layoutMode = 'visual',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
@@ -373,7 +376,7 @@ export const Preview: React.FC<PreviewProps> = ({
     >
       <div
         ref={previewRef}
-        className={`md-preview max-w-3xl mx-auto px-12 py-8 ${editable ? 'contenteditable-preview' : ''}`}
+        className={`md-preview md-preview-page md-preview-layout-${layoutMode} mx-auto ${editable ? 'contenteditable-preview' : ''}`}
         contentEditable={editable}
         suppressContentEditableWarning
         onInput={handleInput}
