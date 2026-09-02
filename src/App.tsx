@@ -279,6 +279,8 @@ export default function App() {
     noticeTimer.current = window.setTimeout(() => setNotice(null), 4500)
   }, [])
 
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), [])
+
   useEffect(() => {
     localStorage.setItem('markdesk-settings', JSON.stringify(settings))
   }, [settings])
@@ -1176,8 +1178,8 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
     if (api?.exportPDF) {
       const defaultName = activeTab.name.replace(/\.(md|markdown|mdx|txt)$/i, '') + '.pdf'
       const result = await api.exportPDF(defaultName, exportHtml)
-      if (result?.error) setNotice({ kind: 'error', text: `PDF 导出失败：${result.error}` })
-      else if (result?.path) setNotice({ kind: 'success', text: 'PDF 已导出' })
+      if (result?.error) showNotice('error', `PDF 导出失败：${result.error}`)
+      else if (result?.path) showNotice('success', 'PDF 已导出')
       return
     }
 
@@ -1188,7 +1190,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
     win.document.write(exportHtml)
     win.document.close()
     setTimeout(() => { win.print() }, 500)
-  }, [content, activeTab.filePath, activeTab.name])
+  }, [content, activeTab.filePath, activeTab.name, showNotice])
 
   // ── Search replace ──
   const handleSearchNavigate = useCallback((_index: number, start: number, end: number) => {
