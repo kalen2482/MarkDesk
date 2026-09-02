@@ -33,4 +33,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Native save-as dialog (writes file) → { path } | null
   saveFileAs: (defaultName, content) => ipcRenderer.invoke('dialog:saveAs', defaultName, content),
+
+  // Render a standalone HTML document to PDF after choosing one destination.
+  exportPDF: (defaultName, html) => ipcRenderer.invoke('dialog:exportPDF', defaultName, html),
 })

@@ -170,7 +170,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                       onMouseDown={preventBlur}
                       onClick={() => { onExportPDF(); setMenuOpen(false); setExportOpen(false) }}
                     >
-                      PDF (打印)
+                      PDF (.pdf)
                     </button>
                   </div>
                 )}

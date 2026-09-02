@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useCallback, useDeferredValue, useState } fro
 import { renderMarkdown } from '../utils/markdown'
 import { highlightCodeBlocks } from '../utils/codeHighlight'
 import { htmlToMarkdown } from '../utils/htmlToMarkdown'
-import { replaceMarkedPaste, selectPastedMarkdown } from '../utils/clipboardMarkdown'
+import { selectPastedMarkdown } from '../utils/clipboardMarkdown'
 import '../styles/preview.css'
 import type { Settings } from '../types'
 
@@ -223,13 +223,24 @@ export const Preview: React.FC<PreviewProps> = ({
   }, [editable, onHtmlChange])
 
   // ── Handle contenteditable input (debounced) ──
-  const handleInput = useCallback(() => {
+  const handleInput = useCallback((event?: React.FormEvent<HTMLDivElement>) => {
     if (!editable || !onHtmlChange) return
     if (isInternalUpdate.current) return
 
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current)
     }
+
+    // Cut is a discrete edit. Commit it to MarkDesk's Markdown history before
+    // the user can click Undo or press Ctrl+Z; otherwise the normal typing
+    // debounce leaves the history stack one operation behind.
+    const inputType = (event?.nativeEvent as InputEvent | undefined)?.inputType
+    if (inputType === 'deleteByCut') {
+      debounceTimer.current = null
+      syncPreviewToMarkdown()
+      return
+    }
+
     debounceTimer.current = setTimeout(() => {
       syncPreviewToMarkdown()
     }, 500) // 500ms debounce
@@ -262,13 +273,11 @@ export const Preview: React.FC<PreviewProps> = ({
     const selection = window.getSelection()
     const range = selection?.rangeCount ? selection.getRangeAt(0) : null
     const canInsertAtSelection = !!range && preview.contains(range.commonAncestorContainer)
-    // Convert only for the DOM insertion. Mark the inserted range so the
-    // subsequent DOM-to-Markdown pass can restore the exact clipboard text
-    // (tables, whitespace and escaped sequences in particular).
-    const markerId = `MARKDESK_PASTE_${Date.now()}_${Math.random().toString(36).slice(2)}`
-    const startMarker = `${markerId}_START`
-    const endMarker = `${markerId}_END`
-    const html = renderMarkdown(`${startMarker}\n\n${markdown}\n\n${endMarker}`, sourcePath)
+    // The rendered fragment carries its exact source. htmlToMarkdown extracts
+    // this wrapper as one protected placeholder instead of letting Turndown
+    // escape numbered heading text such as `1.` into `1\.`.
+    const renderedPaste = renderMarkdown(markdown, sourcePath)
+    const html = `<div class="md-paste-source" data-md-paste-source="${encodeURIComponent(markdown)}">${renderedPaste}</div>`
 
     if (canInsertAtSelection && range) {
       range.deleteContents()
@@ -293,24 +302,7 @@ export const Preview: React.FC<PreviewProps> = ({
     // left source remains stale until a later edit.
     if (onHtmlChange) {
       try {
-        const convertedMarkdown = htmlToMarkdown(preview.innerHTML)
-        const exactMarkdown = replaceMarkedPaste(convertedMarkdown, startMarker, endMarker, markdown)
-
-        // Markers serve only as a source-conversion boundary; remove them from
-        // the visual document before React next renders it.
-        const walker = document.createTreeWalker(preview, NodeFilter.SHOW_TEXT)
-        const markerBlocks = new Set<HTMLElement>()
-        let node: Text | null
-        while ((node = walker.nextNode() as Text | null)) {
-          if (node.data === startMarker || node.data === endMarker) {
-            markerBlocks.add((node.parentElement?.closest('p') || node.parentElement) as HTMLElement)
-          }
-        }
-        markerBlocks.forEach((element) => element?.remove())
-        // The browser may normalize an unusual selection context enough to
-        // obscure a marker. Keep the edit in that rare case, after removing
-        // whichever marker nodes could still be found.
-        onHtmlChange(exactMarkdown ?? htmlToMarkdown(preview.innerHTML))
+        onHtmlChange(htmlToMarkdown(preview.innerHTML))
       } catch (err) {
         console.error('htmlToMarkdown paste error:', err)
       }

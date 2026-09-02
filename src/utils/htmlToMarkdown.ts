@@ -241,6 +241,19 @@ export function htmlToMarkdown(html: string): string {
   const wrapper = document.createElement('div')
   wrapper.innerHTML = html
 
+  // Visual paste renders Markdown for immediate display, but its original
+  // plain-text source remains canonical. Protect the complete pasted fragment
+  // before Turndown can escape ordered-list-like heading text (`1.` → `1\.`)
+  // or otherwise rewrite tables and whitespace.
+  const pastePlaceholders: string[] = []
+  wrapper.querySelectorAll('[data-md-paste-source]').forEach(el => {
+    const encoded = el.getAttribute('data-md-paste-source')
+    if (encoded === null) return
+    const placeholder = `MARKDESKPASTEPLACEHOLDER${pastePlaceholders.length}END`
+    pastePlaceholders.push(decodeURIComponent(encoded))
+    el.replaceWith(document.createTextNode(placeholder))
+  })
+
   // Extract mermaid diagrams to placeholders BEFORE Turndown
   // (Turndown has issues with SVG-containing divs)
   const mermaidPlaceholders: string[] = []
@@ -304,11 +317,18 @@ export function htmlToMarkdown(html: string): string {
     result = result.replace(`KATEXINLINEPLACEHOLDER${i}END`, md)
   })
 
-  // Clean up: collapse 3+ consecutive newlines to 2
-  return result
+  // Clean up generated Markdown first, then restore pasted source last so its
+  // original whitespace and escape characters remain byte-for-byte intact.
+  result = result
     .replace(/\n{3,}/g, '\n\n')
     .replace(/^\n+/, '')
     .replace(/\n+$/, '\n')
+
+  pastePlaceholders.forEach((md, i) => {
+    result = result.replace(`MARKDESKPASTEPLACEHOLDER${i}END`, md)
+  })
+
+  return result
 }
 
 export default turndown

@@ -211,3 +211,46 @@ ipcMain.handle('dialog:saveAs', async (_event, defaultName, content) => {
     return { error: String(err) }
   }
 })
+
+ipcMain.handle('dialog:exportPDF', async (_event, defaultName, html) => {
+  if (!mainWindow) return null
+  if (typeof html !== 'string' || typeof defaultName !== 'string') {
+    return { error: 'Invalid PDF export data.' }
+  }
+
+  const result = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: defaultName || 'untitled.pdf',
+    filters: [{ name: 'PDF document', extensions: ['pdf'] }],
+  })
+  if (result.canceled || !result.filePath) return null
+
+  let pdfWindow = null
+  const temporaryHtmlPath = path.join(app.getPath('temp'), `markdesk-pdf-${process.pid}-${Date.now()}.html`)
+  try {
+    fs.writeFileSync(temporaryHtmlPath, html, 'utf-8')
+    pdfWindow = new BrowserWindow({
+      show: false,
+      backgroundColor: '#ffffff',
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    })
+    await pdfWindow.loadFile(temporaryHtmlPath)
+    await pdfWindow.webContents.executeJavaScript('document.fonts ? document.fonts.ready.then(() => true) : true')
+    const pdf = await pdfWindow.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+      preferCSSPageSize: true,
+    })
+    fs.writeFileSync(result.filePath, pdf)
+    return { path: result.filePath }
+  } catch (err) {
+    console.error('PDF export failed:', err)
+    return { error: String(err) }
+  } finally {
+    if (pdfWindow && !pdfWindow.isDestroyed()) pdfWindow.destroy()
+    try { fs.unlinkSync(temporaryHtmlPath) } catch {}
+  }
+})

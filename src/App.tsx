@@ -29,6 +29,7 @@ declare global {
       openImageDialog: (markdownFilePath?: string) => Promise<{ path: string; markdownPath: string } | null>
       saveFile: (filePath: string, content: string) => Promise<{ success: boolean; path?: string; error?: string }>
       saveFileAs: (defaultName: string, content: string) => Promise<{ path?: string; error?: string } | null>
+      exportPDF: (defaultName: string, html: string) => Promise<{ path?: string; error?: string } | null>
       onCloseRequested: (cb: () => void) => void
       cancelClose: () => void
       confirmClose: () => void
@@ -1154,22 +1155,40 @@ ${html}
   }, [content, activeTab.name])
 
   const handleExportPDF = useCallback(async () => {
-    const printContent = await renderHighlightedHtml(renderMarkdown(content))
-    const win = window.open('', '_blank')
-    if (!win) return
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${activeTab.name}</title>
+    const printContent = await renderHighlightedHtml(renderMarkdown(content, activeTab.filePath))
+    const exportHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${activeTab.name}</title>
 <style>
-body { font-family: -apple-system, system-ui, 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: rgba(0,0,0,0.95); }
+@page { size: A4; margin: 14mm; }
+html { background: #fff; }
+body { box-sizing: border-box; font-family: -apple-system, system-ui, 'Segoe UI', sans-serif; margin: 0; line-height: 1.6; color: rgba(0,0,0,0.95); }
+h1, h2, h3, h4, h5, h6 { break-after: avoid-page; }
+p, blockquote, pre, table { break-inside: avoid-page; }
+img { max-width: 100%; height: auto; }
 pre { background: #f6f5f4; border-radius: 8px; padding: 16px; overflow-x: auto; }
 code { font-family: 'Consolas', monospace; background: rgba(0,0,0,0.05); padding: 0.15em 0.35em; border-radius: 3px; }
 pre code { background: transparent; padding: 0; }
 table { border-collapse: collapse; width: 100%; }
 th, td { border: 1px solid rgba(0,0,0,0.1); padding: 8px 12px; }
 blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59; margin: 0; }
-</style></head><body>${printContent}</body></html>`)
+</style></head><body>${printContent}</body></html>`
+
+    const api = window.electronAPI
+    if (api?.exportPDF) {
+      const defaultName = activeTab.name.replace(/\.(md|markdown|mdx|txt)$/i, '') + '.pdf'
+      const result = await api.exportPDF(defaultName, exportHtml)
+      if (result?.error) setNotice({ kind: 'error', text: `PDF 导出失败：${result.error}` })
+      else if (result?.path) setNotice({ kind: 'success', text: 'PDF 已导出' })
+      return
+    }
+
+    // Browser-development fallback. The packaged desktop app always uses the
+    // direct native save dialog above and never opens print preview.
+    const win = window.open('', '_blank')
+    if (!win) return
+    win.document.write(exportHtml)
     win.document.close()
     setTimeout(() => { win.print() }, 500)
-  }, [content, activeTab.name])
+  }, [content, activeTab.filePath, activeTab.name])
 
   // ── Search replace ──
   const handleSearchNavigate = useCallback((_index: number, start: number, end: number) => {
