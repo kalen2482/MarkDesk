@@ -9,9 +9,18 @@ interface SearchPanelProps {
   onNavigate: (index: number, start: number, end: number) => void
   onReplace: (index: number, newText: string, start: number, end: number) => void
   onReplaceAll: (query: string, replaceText: string, caseSensitive: boolean, useRegex: boolean) => number
+  onSearchStateChange?: (state: SearchState) => void
 }
 
-export const SearchPanel: React.FC<SearchPanelProps> = ({ visible, onClose, content, onNavigate, onReplace, onReplaceAll }) => {
+export interface SearchState {
+  query: string
+  caseSensitive: boolean
+  useRegex: boolean
+  matches: Match[]
+  currentMatch: number
+}
+
+export const SearchPanel: React.FC<SearchPanelProps> = ({ visible, onClose, content, onNavigate, onReplace, onReplaceAll, onSearchStateChange }) => {
   const [query, setQuery] = useState('')
   const [replaceText, setReplaceText] = useState('')
   const [showReplace, setShowReplace] = useState(false)
@@ -84,6 +93,10 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({ visible, onClose, cont
     setMatches(results)
     setCurrentMatch(0)
   }, [query, content, caseSensitive, useRegex])
+
+  useEffect(() => {
+    onSearchStateChange?.({ query, caseSensitive, useRegex, matches, currentMatch })
+  }, [query, caseSensitive, useRegex, matches, currentMatch, onSearchStateChange])
 
   const navigate = useCallback((dir: 1 | -1) => {
     if (matches.length === 0) return

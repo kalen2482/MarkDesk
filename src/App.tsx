@@ -6,6 +6,7 @@ import { Editor } from './components/Editor'
 import { Preview } from './components/Preview'
 import { StatusBar } from './components/StatusBar'
 import { SearchPanel } from './components/SearchPanel'
+import type { SearchState } from './components/SearchPanel'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ContextMenu } from './components/ContextMenu'
 import { ShortcutHelp } from './components/ShortcutHelp'
@@ -30,6 +31,10 @@ declare global {
       saveFile: (filePath: string, content: string) => Promise<{ success: boolean; path?: string; error?: string }>
       saveFileAs: (defaultName: string, content: string) => Promise<{ path?: string; error?: string } | null>
       exportPDF: (defaultName: string, html: string) => Promise<{ path?: string; error?: string } | null>
+      detachTab: (tab: FileTab, screenPoint: { x: number; y: number }) => Promise<boolean>
+      onDetachedTab: (cb: (tab: FileTab) => void) => () => void
+      configureUpdates: (enabled: boolean) => void
+      checkForUpdates: () => Promise<void>
       onCloseRequested: (cb: () => void) => void
       cancelClose: () => void
       confirmClose: () => void
@@ -74,6 +79,7 @@ const DEFAULT_SETTINGS: Settings = {
   lineNumbers: true,
   spellCheck: false,
   defaultDisplayMode: 'split',
+  autoCheckUpdates: true,
 }
 
 const LAST_OPEN_FILE_KEY = 'markdesk-last-open-file'
@@ -233,6 +239,7 @@ export default function App() {
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('outline')
   const [searchVisible, setSearchVisible] = useState(false)
+  const [searchState, setSearchState] = useState<SearchState>({ query: '', caseSensitive: false, useRegex: false, matches: [], currentMatch: 0 })
   const [settingsVisible, setSettingsVisible] = useState(false)
   const [shortcutHelpVisible, setShortcutHelpVisible] = useState(false)
   const [aboutVisible, setAboutVisible] = useState(false)
@@ -859,6 +866,44 @@ export default function App() {
     historyMapRef.current.set(newTab.id, { stack: [''], index: 0 })
     updateHistoryFlagsForTab(newTab.id)
   }, [updateHistoryFlagsForTab])
+
+  const handleTabReorder = useCallback((draggedId: string, targetId: string, position: 'before' | 'after') => {
+    setTabs((previous) => {
+      const dragged = previous.find((tab) => tab.id === draggedId)
+      if (!dragged || draggedId === targetId) return previous
+      const remaining = previous.filter((tab) => tab.id !== draggedId)
+      const targetIndex = remaining.findIndex((tab) => tab.id === targetId)
+      if (targetIndex < 0) return previous
+      const insertionIndex = targetIndex + (position === 'after' ? 1 : 0)
+      const next = [...remaining]
+      next.splice(insertionIndex, 0, dragged)
+      tabsRef.current = next
+      return next
+    })
+  }, [])
+
+  const removeTransferredTab = useCallback((id: string) => {
+    const current = tabsRef.current
+    const index = current.findIndex((tab) => tab.id === id)
+    if (index < 0) return
+    const remaining = current.filter((tab) => tab.id !== id)
+    const next = remaining.length > 0 ? remaining : [createBlankStarterTab()]
+    tabsRef.current = next
+    historyMapRef.current.delete(id)
+    setTabs(next)
+    if (activeTabId === id) {
+      const replacement = next[Math.min(index, next.length - 1)]
+      setActiveTabId(replacement.id)
+      updateHistoryFlagsForTab(replacement.id)
+    }
+  }, [activeTabId, updateHistoryFlagsForTab])
+
+  const handleTabDetach = useCallback(async (tabId: string, screenPoint: { x: number; y: number }) => {
+    const tab = tabsRef.current.find((item) => item.id === tabId)
+    const api = window.electronAPI
+    if (!tab || !api?.detachTab) return
+    if (await api.detachTab(tab, screenPoint)) removeTransferredTab(tabId)
+  }, [removeTransferredTab])
 
   const handleTabClose = useCallback((id: string) => {
     const currentTabs = tabsRef.current
@@ -1509,6 +1554,19 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
       allowStartupRestoreRef.current = false
       openFile(file)
     })
+    const unsubscribeDetached = api.onDetachedTab((detachedTab) => {
+      // A detached tab is the startup document for this new window. Prevent
+      // the regular last-session restore timer from opening another document.
+      allowStartupRestoreRef.current = false
+      const tab = { ...detachedTab, id: genTabId() }
+      const current = tabsRef.current
+      const next = isUntouchedStarterTab(current) ? [tab] : [...current, tab]
+      tabsRef.current = next
+      setTabs(next)
+      setActiveTabId(tab.id)
+      historyMapRef.current.set(tab.id, { stack: [tab.content], index: 0 })
+      updateHistoryFlagsForTab(tab.id)
+    })
     api.notifyReady()
 
     // Give a file supplied by Windows/file association priority. Otherwise,
@@ -1530,8 +1588,15 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
     return () => {
       window.clearTimeout(restoreTimer)
       unsubscribe()
+      unsubscribeDetached()
     }
   }, [updateHistoryFlagsForTab, addRecentFile])
+
+  // Update preferences can change without re-registering file/tab listeners
+  // or re-running the startup restore sequence.
+  useEffect(() => {
+    window.electronAPI?.configureUpdates(settings.autoCheckUpdates)
+  }, [settings.autoCheckUpdates])
 
   // ── Render ──
   if (zenMode) {
@@ -1555,6 +1620,8 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
                 onDropFile={handleDropFile}
                 onPasteImage={handlePasteImage}
                 onContextMenu={handleContextMenu}
+                searchMatches={searchVisible ? searchState.matches : []}
+                currentSearchMatch={searchState.currentMatch}
               />
             </div>
           )}
@@ -1577,6 +1644,10 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
                 editable={displayMode === 'split' || displayMode === 'visual'}
                 onHtmlChange={handlePreviewHtmlChange}
                 syncSource={syncSource}
+                searchQuery={searchVisible ? searchState.query : ''}
+                searchCaseSensitive={searchState.caseSensitive}
+                searchUseRegex={searchState.useRegex}
+                currentSearchMatch={searchState.currentMatch}
               />
             </div>
           )}
@@ -1588,6 +1659,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
           onNavigate={handleSearchNavigate}
           onReplace={handleSearchReplace}
           onReplaceAll={handleSearchReplaceAll}
+          onSearchStateChange={setSearchState}
         />
         <ContextMenu
           visible={contextMenu.visible}
@@ -1651,6 +1723,8 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         onTabClose={handleTabClose}
         onTabRename={handleTabRename}
         onNewTab={handleNewTab}
+        onTabReorder={handleTabReorder}
+        onTabDetach={handleTabDetach}
       />
 
       {/* Search Panel */}
@@ -1661,6 +1735,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         onNavigate={handleSearchNavigate}
         onReplace={handleSearchReplace}
         onReplaceAll={handleSearchReplaceAll}
+        onSearchStateChange={setSearchState}
       />
 
       {/* Main content area */}
@@ -1705,6 +1780,8 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
                   onDropFile={handleDropFile}
                   onPasteImage={handlePasteImage}
                   onContextMenu={handleContextMenu}
+                  searchMatches={searchVisible ? searchState.matches : []}
+                  currentSearchMatch={searchState.currentMatch}
                 />
               </div>
               {displayMode === 'split' && (
@@ -1732,6 +1809,10 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
                 editable={displayMode === 'split' || displayMode === 'visual'}
                 onHtmlChange={handlePreviewHtmlChange}
                 syncSource={syncSource}
+                searchQuery={searchVisible ? searchState.query : ''}
+                searchCaseSensitive={searchState.caseSensitive}
+                searchUseRegex={searchState.useRegex}
+                currentSearchMatch={searchState.currentMatch}
               />
             </div>
           )}
@@ -1761,6 +1842,7 @@ blockquote { border-left: 3px solid #0075de; padding-left: 16px; color: #615d59;
         onClose={() => setSettingsVisible(false)}
         language={language}
         onLanguageChange={setLanguage}
+        onCheckForUpdates={() => window.electronAPI?.checkForUpdates()}
       />
       <ShortcutHelp
         visible={shortcutHelpVisible}

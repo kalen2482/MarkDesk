@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useLayoutEffect, useMemo, useState } from 'react'
-import type { Settings } from '../types'
+import type { Match, Settings } from '../types'
 import { normalizeClipboardPlainText } from '../utils/clipboardMarkdown'
 
 interface EditorProps {
@@ -14,6 +14,8 @@ interface EditorProps {
   onDropFile: (file: File) => void
   onPasteImage: (dataUrl: string, name: string) => void
   onContextMenu: (e: React.MouseEvent) => void
+  searchMatches?: Match[]
+  currentSearchMatch?: number
 }
 
 export const Editor: React.FC<EditorProps> = ({
@@ -28,10 +30,13 @@ export const Editor: React.FC<EditorProps> = ({
   onDropFile,
   onPasteImage,
   onContextMenu,
+  searchMatches = [],
+  currentSearchMatch = 0,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const lineNumbersRef = useRef<HTMLDivElement>(null)
   const wrapMeasureRef = useRef<HTMLDivElement>(null)
+  const searchHighlightRef = useRef<HTMLDivElement>(null)
   const syncingScrollRef = useRef(false)
   const [lineHeights, setLineHeights] = useState<number[]>([])
 
@@ -73,6 +78,10 @@ export const Editor: React.FC<EditorProps> = ({
     }
     if (lineNumbersRef.current) {
       lineNumbersRef.current.scrollTop = ta.scrollTop
+    }
+    if (searchHighlightRef.current) {
+      searchHighlightRef.current.scrollTop = ta.scrollTop
+      searchHighlightRef.current.scrollLeft = ta.scrollLeft
     }
   }
 
@@ -307,6 +316,35 @@ export const Editor: React.FC<EditorProps> = ({
     return Array.from({ length: count }, (_, i) => i + 1)
   }, [content])
 
+  const highlightedContent = useMemo(() => {
+    if (searchMatches.length === 0) return content
+    const parts: React.ReactNode[] = []
+    let cursor = 0
+    searchMatches.forEach((match, index) => {
+      if (match.start < cursor || match.end <= match.start) return
+      parts.push(content.slice(cursor, match.start))
+      parts.push(
+        <span
+          key={`${match.start}-${match.end}-${index}`}
+          className={index === currentSearchMatch ? 'source-search-current' : 'source-search-match'}
+        >
+          {content.slice(match.start, match.end)}
+        </span>,
+      )
+      cursor = match.end
+    })
+    parts.push(content.slice(cursor))
+    return parts
+  }, [content, currentSearchMatch, searchMatches])
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current
+    const highlights = searchHighlightRef.current
+    if (!textarea || !highlights) return
+    highlights.scrollTop = textarea.scrollTop
+    highlights.scrollLeft = textarea.scrollLeft
+  }, [content, currentSearchMatch, searchMatches, textareaRef])
+
   // A wrapped logical line occupies more than one visual row. Mirror the
   // textarea's text box so the gutter keeps each number beside its real line.
   useLayoutEffect(() => {
@@ -375,8 +413,28 @@ export const Editor: React.FC<EditorProps> = ({
         </div>
       )}
 
-      {/* Textarea */}
-      <textarea
+      <div className="relative flex-1 min-w-0 h-full">
+        {searchMatches.length > 0 && (
+          <div
+            ref={searchHighlightRef}
+            className="editor-search-highlights absolute inset-0 p-4 pointer-events-none"
+            style={{
+              fontSize: `${settings.fontSize}px`,
+              lineHeight: '1.6',
+              fontFamily: settings.fontFamily,
+              tabSize: settings.tabSize,
+              whiteSpace: settings.wordWrap ? 'pre-wrap' : 'pre',
+              wordBreak: settings.wordWrap ? 'break-all' : 'normal',
+              overflowWrap: settings.wordWrap ? 'break-word' : 'normal',
+            }}
+            aria-hidden="true"
+          >
+            {highlightedContent}
+          </div>
+        )}
+
+        {/* Textarea */}
+        <textarea
         ref={textareaRef}
         value={content}
         onChange={(e) => onChange(e.target.value)}
@@ -391,7 +449,7 @@ export const Editor: React.FC<EditorProps> = ({
         onDragOver={handleDragOver}
         onContextMenu={onContextMenu}
         wrap={settings.wordWrap ? 'soft' : 'off'}
-        className="flex-1 p-4 bg-transparent resize-none outline-none font-mono text-sm leading-relaxed text-near-black dark:text-dark-text"
+        className="relative w-full h-full p-4 bg-transparent resize-none outline-none font-mono text-sm leading-relaxed text-near-black dark:text-dark-text"
         style={{
           fontSize: `${settings.fontSize}px`,
           lineHeight: '1.6',
@@ -406,6 +464,7 @@ export const Editor: React.FC<EditorProps> = ({
         placeholder="开始输入 Markdown..."
         aria-label="Markdown 编辑器"
       />
+      </div>
     </div>
   )
 }

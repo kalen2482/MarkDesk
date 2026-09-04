@@ -2,6 +2,38 @@
 
 All notable changes to MarkDesk are documented here.
 
+## [0.2.9] - 2026-09-04
+
+### 中文
+
+#### 新增与改进
+
+- 搜索结果现在会同时在源码编辑器和右侧预览中高亮显示，并使用不同颜色标识当前匹配项。
+- 标签页支持拖动调整顺序；将标签拖出 MarkDesk 窗口后，会把该文档移动到新的独立窗口继续编辑。
+- 新增 GitHub 自动更新：启动后可自动检查新版本，也可在设置中手动检查或关闭自动检查。
+- 检测到新版本时可立即下载、稍后提醒，或不再提醒该版本；下载完成后可立即重启安装，也可退出应用时安装。
+
+#### 修复
+
+- 修复拆出的新窗口可能同时恢复上次文档，导致出现额外标签的问题。
+- 修复多窗口模式下打开、另存为、插入图片和导出 PDF 对话框可能附着到错误窗口的问题。
+- 修复多窗口关闭确认状态相互影响的问题。
+
+### English
+
+#### Added and improved
+
+- Search results are now highlighted in both the source editor and preview, with a distinct color for the active match.
+- Tabs can now be reordered by dragging. Dragging a tab outside the MarkDesk window moves the document into a new independent window.
+- Added GitHub-based automatic updates, including startup checks, manual checks, and an option to disable automatic checking in Settings.
+- When an update is found, it can be downloaded immediately, postponed, or skipped for that version. A downloaded update can be installed immediately or when MarkDesk exits.
+
+#### Fixed
+
+- Fixed detached windows also restoring the previous session document and creating an unwanted extra tab.
+- Fixed Open, Save As, Insert Image, and Export PDF dialogs attaching to the wrong window in multi-window mode.
+- Fixed close-confirmation state leaking between multiple windows.
+
 ## [0.2.7] - 2026-08-24
 
 ### 中文

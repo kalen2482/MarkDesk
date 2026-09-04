@@ -9,12 +9,16 @@ interface TabBarProps {
   onTabClose: (id: string) => void
   onTabRename: (id: string, name: string) => void
   onNewTab: () => void
+  onTabReorder: (draggedId: string, targetId: string, position: 'before' | 'after') => void
+  onTabDetach: (tabId: string, screenPoint: { x: number; y: number }) => void
 }
 
-export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, onTabClick, onTabClose, onTabRename, onNewTab }) => {
+export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, onTabClick, onTabClose, onTabRename, onNewTab, onTabReorder, onTabDetach }) => {
   const [editingTabId, setEditingTabId] = useState<string | null>(null)
   const [draftName, setDraftName] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ id: string; position: 'before' | 'after' } | null>(null)
 
   useEffect(() => {
     if (editingTabId) inputRef.current?.select()
@@ -42,7 +46,35 @@ export const TabBar: React.FC<TabBarProps> = ({ tabs, activeTabId, onTabClick, o
           aria-selected={tab.id === activeTabId}
           tabIndex={tab.id === activeTabId ? 0 : -1}
           title={tab.filePath ? tab.name : '双击或按 F2 重命名'}
-          className={`group flex items-center gap-2 h-7 px-3 rounded-notion cursor-pointer transition-colors flex-shrink-0 ${tab.id === activeTabId ? 'bg-white dark:bg-dark-bg text-near-black dark:text-dark-text shadow-sm' : 'text-warm-gray-500 hover:bg-black/5 dark:hover:bg-white/5'}`}
+          draggable={editingTabId !== tab.id}
+          className={`group relative flex items-center gap-2 h-7 px-3 rounded-notion cursor-pointer transition-colors flex-shrink-0 ${tab.id === activeTabId ? 'bg-white dark:bg-dark-bg text-near-black dark:text-dark-text shadow-sm' : 'text-warm-gray-500 hover:bg-black/5 dark:hover:bg-white/5'} ${dropTarget?.id === tab.id && dropTarget.position === 'before' ? 'before:absolute before:left-0 before:top-1 before:bottom-1 before:w-0.5 before:bg-notion-blue' : ''} ${dropTarget?.id === tab.id && dropTarget.position === 'after' ? 'after:absolute after:right-0 after:top-1 after:bottom-1 after:w-0.5 after:bg-notion-blue' : ''}`}
+          onDragStart={(event) => {
+            setDraggedTabId(tab.id)
+            event.dataTransfer.effectAllowed = 'move'
+            event.dataTransfer.setData('application/x-markdesk-tab', tab.id)
+          }}
+          onDragOver={(event) => {
+            if (!draggedTabId || draggedTabId === tab.id) {
+              setDropTarget(null)
+              return
+            }
+            event.preventDefault()
+            const rect = event.currentTarget.getBoundingClientRect()
+            setDropTarget({ id: tab.id, position: event.clientX < rect.left + rect.width / 2 ? 'before' : 'after' })
+          }}
+          onDrop={(event) => {
+            event.preventDefault()
+            if (draggedTabId && dropTarget && draggedTabId !== tab.id) {
+              onTabReorder(draggedTabId, tab.id, dropTarget.position)
+            }
+            setDraggedTabId(null)
+            setDropTarget(null)
+          }}
+          onDragEnd={(event) => {
+            if (draggedTabId) onTabDetach(draggedTabId, { x: event.screenX, y: event.screenY })
+            setDraggedTabId(null)
+            setDropTarget(null)
+          }}
           onClick={() => onTabClick(tab.id)}
           onDoubleClick={() => beginRename(tab)}
           onKeyDown={(e) => {

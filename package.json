@@ -1,7 +1,7 @@
 {
   "name": "markdesk",
   "private": true,
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "A lightweight, local-first Markdown editor with source, split, and visual editing modes.",
   "author": "Apple",
   "homepage": "https://github.com/kalen2482/MarkDesk",
@@ -25,6 +25,7 @@
   "dependencies": {
     "@types/katex": "^0.16.8",
     "dompurify": "^3.0.9",
+    "electron-updater": "^6.8.9",
     "highlight.js": "^11.9.0",
     "katex": "^0.18.1",
     "marked": "^12.0.0",

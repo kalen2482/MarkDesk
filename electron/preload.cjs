@@ -36,4 +36,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Render a standalone HTML document to PDF after choosing one destination.
   exportPDF: (defaultName, html) => ipcRenderer.invoke('dialog:exportPDF', defaultName, html),
+  detachTab: (tab, screenPoint) => ipcRenderer.invoke('tab:detach', tab, screenPoint),
+  onDetachedTab: (callback) => {
+    const listener = (_event, tab) => callback(tab)
+    ipcRenderer.on('tab:detached', listener)
+    return () => ipcRenderer.removeListener('tab:detached', listener)
+  },
+  configureUpdates: (enabled) => ipcRenderer.send('updates:configure', enabled),
+  checkForUpdates: () => ipcRenderer.invoke('updates:check'),
 })

@@ -9,9 +9,10 @@ interface SettingsPanelProps {
   onClose: () => void
   language: AppLanguage
   onLanguageChange: (language: AppLanguage) => void
+  onCheckForUpdates?: () => void
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ visible, settings, onChange, onClose, language, onLanguageChange }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ visible, settings, onChange, onClose, language, onLanguageChange, onCheckForUpdates }) => {
   const { t } = useI18n()
   const [local, setLocal] = useState(settings)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -212,6 +213,19 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ visible, settings,
               value={local.syncScroll}
               onChange={(v) => update('syncScroll', v)}
             />
+          </Section>
+          <Section title="更新">
+            <ToggleRow
+              label="自动检查更新"
+              desc="启动后从 GitHub 检查 MarkDesk 新版本"
+              value={local.autoCheckUpdates}
+              onChange={(v) => update('autoCheckUpdates', v)}
+            />
+            <div className="flex justify-end">
+              <button className="px-3 py-1.5 text-sm rounded-notion border border-whisper-border dark:border-dark-border hover:bg-warm-white dark:hover:bg-white/5" onClick={onCheckForUpdates}>
+                立即检查更新
+              </button>
+            </div>
           </Section>
         </div>
 

@@ -13,6 +13,10 @@ files:
 win:
   target: nsis
   icon: build/icon.ico
+publish:
+  provider: github
+  owner: kalen2482
+  repo: MarkDesk
 nsis:
   oneClick: false
   perMachine: false

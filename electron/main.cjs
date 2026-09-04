@@ -1,13 +1,17 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const { autoUpdater } = require('electron-updater')
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL)
 let mainWindow = null
 let pendingFile = null
-let rendererReady = false
-let allowWindowClose = false
-let closeRequestPending = false
+const readyWindows = new WeakSet()
+const closeStates = new WeakMap()
+const initialTabs = new Map()
+let updatePromptedVersion = null
+let updateCheckRunning = false
+let manualUpdateCheck = false
 
 // Ensure only one instance runs; additional "open with" requests are
 // forwarded to the existing window (Windows / Linux).
@@ -16,8 +20,8 @@ if (!gotLock) {
   app.quit()
 }
 
-function createWindow() {
-  mainWindow = new BrowserWindow({
+function createWindow(initialTab = null) {
+  const win = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
@@ -34,26 +38,32 @@ function createWindow() {
   })
 
   if (isDev) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
+    win.loadURL(process.env.VITE_DEV_SERVER_URL)
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
   }
 
-  mainWindow.on('closed', () => {
-    mainWindow = null
-    allowWindowClose = false
-    closeRequestPending = false
+  mainWindow = win
+  closeStates.set(win, { allow: false, pending: false })
+  if (initialTab) initialTabs.set(win.webContents.id, initialTab)
+
+  win.on('focus', () => { mainWindow = win })
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = BrowserWindow.getAllWindows()[0] || null
   })
 
   // Keep OS close, Alt+F4, and the custom close button on the same safe path.
-  mainWindow.on('close', (event) => {
-    if (allowWindowClose) return
+  win.on('close', (event) => {
+    const state = closeStates.get(win) || { allow: false, pending: false }
+    if (state.allow) return
     event.preventDefault()
-    if (!closeRequestPending) {
-      closeRequestPending = true
-      mainWindow.webContents.send('app:close-requested')
+    if (!state.pending) {
+      state.pending = true
+      closeStates.set(win, state)
+      win.webContents.send('app:close-requested')
     }
   })
+  return win
 }
 
 function readMdFile(filePath) {
@@ -76,7 +86,7 @@ function fileFromArgv(argv) {
 // Send a file to the renderer if ready, otherwise queue it.
 function sendFile(file) {
   if (!file) return
-  if (mainWindow && rendererReady) {
+  if (mainWindow && readyWindows.has(mainWindow)) {
     mainWindow.webContents.send('file:opened', file)
   } else {
     pendingFile = file
@@ -114,37 +124,65 @@ app.on('second-instance', (_event, argv) => {
 
 // ── IPC handlers ──
 
-ipcMain.on('app:ready', () => {
-  rendererReady = true
-  if (pendingFile && mainWindow) {
-    mainWindow.webContents.send('file:opened', pendingFile)
+ipcMain.on('app:ready', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (win) readyWindows.add(win)
+  const initialTab = initialTabs.get(event.sender.id)
+  if (initialTab && win) {
+    win.webContents.send('tab:detached', initialTab)
+    initialTabs.delete(event.sender.id)
+  }
+  if (pendingFile && win) {
+    win.webContents.send('file:opened', pendingFile)
     pendingFile = null
   }
 })
 
-ipcMain.on('window:minimize', () => mainWindow?.minimize())
-ipcMain.on('window:toggleMaximize', () => {
-  if (!mainWindow) return
-  if (mainWindow.isMaximized()) mainWindow.unmaximize()
-  else mainWindow.maximize()
+ipcMain.on('window:minimize', (event) => BrowserWindow.fromWebContents(event.sender)?.minimize())
+ipcMain.on('window:toggleMaximize', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win) return
+  if (win.isMaximized()) win.unmaximize()
+  else win.maximize()
 })
-ipcMain.on('window:close', () => mainWindow?.close())
-ipcMain.on('app:cancel-close', () => {
+ipcMain.on('window:close', (event) => BrowserWindow.fromWebContents(event.sender)?.close())
+ipcMain.on('app:cancel-close', (event) => {
   // The renderer dismissed its save-confirmation dialog. Permit the next OS
   // close request to notify it again instead of leaving the window stuck in a
   // pending-close state.
-  closeRequestPending = false
+  const win = BrowserWindow.fromWebContents(event.sender)
+  const state = win && closeStates.get(win)
+  if (state) state.pending = false
 })
-ipcMain.on('app:confirm-close', () => {
-  if (!mainWindow) return
-  allowWindowClose = true
-  closeRequestPending = false
-  mainWindow.close()
+ipcMain.on('app:confirm-close', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win) return
+  const state = closeStates.get(win) || { allow: false, pending: false }
+  state.allow = true
+  state.pending = false
+  closeStates.set(win, state)
+  win.close()
 })
 
-ipcMain.handle('dialog:openFile', async () => {
-  if (!mainWindow) return null
-  const result = await dialog.showOpenDialog(mainWindow, {
+ipcMain.handle('tab:detach', async (event, tab, screenPoint) => {
+  const source = BrowserWindow.fromWebContents(event.sender)
+  if (!source || !tab || typeof tab.id !== 'string') return false
+  const bounds = source.getBounds()
+  const outside = !screenPoint || screenPoint.x < bounds.x || screenPoint.x > bounds.x + bounds.width || screenPoint.y < bounds.y || screenPoint.y > bounds.y + bounds.height
+  if (!outside) return false
+  const win = createWindow(tab)
+  if (screenPoint && Number.isFinite(screenPoint.x) && Number.isFinite(screenPoint.y)) {
+    win.setPosition(Math.max(0, Math.round(screenPoint.x - 300)), Math.max(0, Math.round(screenPoint.y - 30)))
+  }
+  win.show()
+  win.focus()
+  return true
+})
+
+ipcMain.handle('dialog:openFile', async (event) => {
+  const owner = BrowserWindow.fromWebContents(event.sender) || mainWindow
+  if (!owner) return null
+  const result = await dialog.showOpenDialog(owner, {
     properties: ['openFile'],
     filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx', 'txt'] }],
   })
@@ -152,9 +190,10 @@ ipcMain.handle('dialog:openFile', async () => {
   return readMdFile(result.filePaths[0])
 })
 
-ipcMain.handle('dialog:openBackup', async () => {
-  if (!mainWindow) return null
-  const result = await dialog.showOpenDialog(mainWindow, {
+ipcMain.handle('dialog:openBackup', async (event) => {
+  const owner = BrowserWindow.fromWebContents(event.sender) || mainWindow
+  if (!owner) return null
+  const result = await dialog.showOpenDialog(owner, {
     properties: ['openFile'],
     filters: [{ name: 'MarkDesk backup', extensions: ['json'] }],
   })
@@ -173,9 +212,10 @@ ipcMain.handle('file:openRecent', async (_event, filePath) => {
   return readMdFile(filePath)
 })
 
-ipcMain.handle('dialog:openImage', async (_event, markdownFilePath) => {
-  if (!mainWindow) return null
-  const result = await dialog.showOpenDialog(mainWindow, {
+ipcMain.handle('dialog:openImage', async (event, markdownFilePath) => {
+  const owner = BrowserWindow.fromWebContents(event.sender) || mainWindow
+  if (!owner) return null
+  const result = await dialog.showOpenDialog(owner, {
     properties: ['openFile'],
     filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'] }],
   })
@@ -196,9 +236,10 @@ ipcMain.handle('file:save', async (_event, filePath, content) => {
   }
 })
 
-ipcMain.handle('dialog:saveAs', async (_event, defaultName, content) => {
-  if (!mainWindow) return null
-  const result = await dialog.showSaveDialog(mainWindow, {
+ipcMain.handle('dialog:saveAs', async (event, defaultName, content) => {
+  const owner = BrowserWindow.fromWebContents(event.sender) || mainWindow
+  if (!owner) return null
+  const result = await dialog.showSaveDialog(owner, {
     defaultPath: defaultName || 'untitled.md',
     filters: [{ name: 'Markdown', extensions: ['md'] }],
   })
@@ -212,13 +253,14 @@ ipcMain.handle('dialog:saveAs', async (_event, defaultName, content) => {
   }
 })
 
-ipcMain.handle('dialog:exportPDF', async (_event, defaultName, html) => {
-  if (!mainWindow) return null
+ipcMain.handle('dialog:exportPDF', async (event, defaultName, html) => {
+  const owner = BrowserWindow.fromWebContents(event.sender) || mainWindow
+  if (!owner) return null
   if (typeof html !== 'string' || typeof defaultName !== 'string') {
     return { error: 'Invalid PDF export data.' }
   }
 
-  const result = await dialog.showSaveDialog(mainWindow, {
+  const result = await dialog.showSaveDialog(owner, {
     defaultPath: defaultName || 'untitled.pdf',
     filters: [{ name: 'PDF document', extensions: ['pdf'] }],
   })
@@ -254,3 +296,68 @@ ipcMain.handle('dialog:exportPDF', async (_event, defaultName, html) => {
     try { fs.unlinkSync(temporaryHtmlPath) } catch {}
   }
 })
+
+const updatePreferencesPath = () => path.join(app.getPath('userData'), 'update-preferences.json')
+const readUpdatePreferences = () => {
+  try { return JSON.parse(fs.readFileSync(updatePreferencesPath(), 'utf-8')) }
+  catch { return { autoCheck: true, skippedVersion: null } }
+}
+const writeUpdatePreferences = (next) => fs.writeFileSync(updatePreferencesPath(), JSON.stringify(next, null, 2), 'utf-8')
+
+async function checkForUpdates(manual = false, ownerWindow = mainWindow) {
+  if (isDev || updateCheckRunning) return
+  updateCheckRunning = true
+  manualUpdateCheck = manual
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    if (!result?.updateInfo || result.updateInfo.version === app.getVersion()) {
+      if (manual && ownerWindow) await dialog.showMessageBox(ownerWindow, { type: 'info', title: '检查更新', message: '当前已是最新版本。' })
+    }
+  } catch (error) {
+    console.error('Update check failed:', error)
+    if (manual && ownerWindow) await dialog.showMessageBox(ownerWindow, { type: 'warning', title: '检查更新', message: '暂时无法检查更新，请稍后重试。' })
+  } finally {
+    updateCheckRunning = false
+    manualUpdateCheck = false
+  }
+}
+
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
+autoUpdater.on('update-available', async (info) => {
+  const preferences = readUpdatePreferences()
+  if (!mainWindow) return
+  if (!manualUpdateCheck && (preferences.skippedVersion === info.version || updatePromptedVersion === info.version)) return
+  updatePromptedVersion = info.version
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: '发现新版本',
+    message: `发现 MarkDesk ${info.version}`,
+    detail: `当前版本：${app.getVersion()}\n可以从 GitHub 下载并自动安装新版本。`,
+    buttons: ['立即更新', '稍后提醒', '不再提醒此版本'],
+    defaultId: 0,
+    cancelId: 1,
+  })
+  if (response === 2) {
+    writeUpdatePreferences({ ...preferences, skippedVersion: info.version })
+  } else if (response === 0) {
+    try { await autoUpdater.downloadUpdate() }
+    catch (error) { await dialog.showMessageBox(mainWindow, { type: 'error', title: '更新失败', message: '更新下载失败，请稍后重试或前往 GitHub 手动下载。' }) }
+  }
+})
+autoUpdater.on('update-downloaded', async (info) => {
+  if (!mainWindow) return
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'info', title: '更新已下载', message: `MarkDesk ${info.version} 已准备就绪。`,
+    detail: '立即重启以完成安装，或关闭 MarkDesk 时自动安装。',
+    buttons: ['立即重启安装', '稍后安装'], defaultId: 0, cancelId: 1,
+  })
+  if (response === 0) autoUpdater.quitAndInstall(false, true)
+})
+
+ipcMain.on('updates:configure', (event, enabled) => {
+  const preferences = readUpdatePreferences()
+  writeUpdatePreferences({ ...preferences, autoCheck: Boolean(enabled) })
+  if (enabled) setTimeout(() => checkForUpdates(false, BrowserWindow.fromWebContents(event.sender)), 4000)
+})
+ipcMain.handle('updates:check', (event) => checkForUpdates(true, BrowserWindow.fromWebContents(event.sender)))

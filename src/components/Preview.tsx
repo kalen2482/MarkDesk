@@ -29,6 +29,10 @@ interface PreviewProps {
   sourcePath?: string
   /** Current workspace layout, used to choose a responsive reading width. */
   layoutMode?: 'split' | 'visual'
+  searchQuery?: string
+  searchCaseSensitive?: boolean
+  searchUseRegex?: boolean
+  currentSearchMatch?: number
 }
 
 export const Preview: React.FC<PreviewProps> = ({
@@ -42,6 +46,10 @@ export const Preview: React.FC<PreviewProps> = ({
   syncSource,
   sourcePath,
   layoutMode = 'visual',
+  searchQuery = '',
+  searchCaseSensitive = false,
+  searchUseRegex = false,
+  currentSearchMatch = 0,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
@@ -109,6 +117,80 @@ export const Preview: React.FC<PreviewProps> = ({
       window.cancelIdleCallback(idle)
     }
   }, [renderedHtml])
+
+  // Keep preview search highlights separate from the editable DOM. Chromium's
+  // CSS Highlight API paints ranges without inserting spans that could leak
+  // into Markdown when visual edits are synchronized back to source.
+  useEffect(() => {
+    const highlights = (CSS as typeof CSS & { highlights?: Map<string, unknown> }).highlights
+    const HighlightCtor = (window as typeof window & { Highlight?: new (...ranges: Range[]) => unknown }).Highlight
+    const root = previewRef.current
+    if (!highlights || !HighlightCtor || !root) return
+
+    highlights.delete('markdesk-search-match')
+    highlights.delete('markdesk-search-current')
+    if (!searchQuery) return
+
+    let regex: RegExp
+    try {
+      regex = searchUseRegex
+        ? new RegExp(searchQuery, searchCaseSensitive ? 'g' : 'gi')
+        : new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), searchCaseSensitive ? 'g' : 'gi')
+    } catch {
+      return
+    }
+
+    const textNodes: Text[] = []
+    const offsets: number[] = []
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let fullText = ''
+    let node: Node | null
+    while ((node = walker.nextNode())) {
+      const textNode = node as Text
+      offsets.push(fullText.length)
+      textNodes.push(textNode)
+      fullText += textNode.data
+    }
+
+    const locate = (offset: number) => {
+      for (let index = textNodes.length - 1; index >= 0; index--) {
+        if (offset >= offsets[index]) return { node: textNodes[index], offset: offset - offsets[index] }
+      }
+      return null
+    }
+
+    const ranges: Range[] = []
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(fullText)) !== null) {
+      if (match[0].length === 0) {
+        regex.lastIndex++
+        continue
+      }
+      const start = locate(match.index)
+      const end = locate(match.index + match[0].length - 1)
+      if (start && end) {
+        const range = document.createRange()
+        range.setStart(start.node, start.offset)
+        range.setEnd(end.node, end.offset + 1)
+        ranges.push(range)
+      }
+    }
+
+    if (ranges.length > 0) {
+      const currentIndex = Math.min(currentSearchMatch, ranges.length - 1)
+      const current = ranges[currentIndex]
+      const others = ranges.filter((_, index) => index !== currentIndex)
+      if (others.length > 0) highlights.set('markdesk-search-match', new HighlightCtor(...others))
+      highlights.set('markdesk-search-current', new HighlightCtor(current))
+      const currentElement = current.startContainer.parentElement
+      currentElement?.scrollIntoView({ block: 'center', inline: 'nearest' })
+    }
+
+    return () => {
+      highlights.delete('markdesk-search-match')
+      highlights.delete('markdesk-search-current')
+    }
+  }, [currentSearchMatch, renderedHtml, searchCaseSensitive, searchQuery, searchUseRegex])
 
   // ── Render mermaid diagrams after HTML is mounted ──
   useEffect(() => {

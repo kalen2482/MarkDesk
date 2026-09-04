@@ -43,6 +43,7 @@ export interface Settings {
   lineNumbers: boolean
   spellCheck: boolean
   defaultDisplayMode: DefaultDisplayMode
+  autoCheckUpdates: boolean
 }
 
 export interface RecentFile {

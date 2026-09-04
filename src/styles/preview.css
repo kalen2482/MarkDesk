@@ -8,6 +8,36 @@
   word-wrap: break-word;
 }
 
+::highlight(markdesk-search-match) {
+  background-color: rgba(250, 204, 21, 0.55);
+  color: inherit;
+}
+
+::highlight(markdesk-search-current) {
+  background-color: rgba(249, 115, 22, 0.8);
+  color: inherit;
+}
+
+.editor-search-highlights {
+  color: transparent;
+  overflow: scroll;
+  scrollbar-width: none;
+}
+
+.editor-search-highlights::-webkit-scrollbar {
+  display: none;
+}
+
+.editor-search-highlights .source-search-match {
+  background-color: rgba(250, 204, 21, 0.55);
+  border-radius: 2px;
+}
+
+.editor-search-highlights .source-search-current {
+  background-color: rgba(249, 115, 22, 0.8);
+  border-radius: 2px;
+}
+
 /* Responsive document canvas. Visual mode can use a wide desktop display,
    while split mode fills its pane without forcing excessively long lines. */
 .md-preview-page {
