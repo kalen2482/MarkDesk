@@ -1,6 +1,5 @@
 appId: com.apple.markdesk
 productName: MarkDesk
-artifactName: "${productName}-${version}-win-x64-setup.${ext}"
 copyright: Copyright © 2026 Apple
 directories:
   output: release
@@ -9,10 +8,19 @@ files:
   - dist/**/*
   - electron/**/*
   - build/icon.ico
+  - build/icon.icns
   - package.json
+mac:
+  target:
+    - dmg
+    - zip
+  icon: build/icon.icns
+  category: public.app-category.developer-tools
+  artifactName: "${productName}-${version}-mac-${arch}.${ext}"
 win:
   target: nsis
   icon: build/icon.ico
+  artifactName: "${productName}-${version}-win-x64-setup.${ext}"
 publish:
   provider: github
   owner: kalen2482

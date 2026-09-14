@@ -20,7 +20,8 @@
     "test:all": "npm run test && npm run test:unit",
     "preview": "vite preview",
     "dist": "vite build && electron-builder --win --config electron-builder.yml",
-    "dist:win": "vite build && electron-builder --win nsis --config electron-builder.yml"
+    "dist:win": "vite build && electron-builder --win nsis --config electron-builder.yml",
+    "dist:mac": "vite build && electron-builder --mac --config electron-builder.yml"
   },
   "dependencies": {
     "@types/katex": "^0.16.8",

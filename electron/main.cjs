@@ -27,7 +27,9 @@ function createWindow(initialTab = null) {
     minWidth: 800,
     minHeight: 600,
     title: 'MarkDesk',
-    icon: path.join(__dirname, '..', 'build', 'icon.ico'),
+    icon: process.platform === 'darwin'
+      ? path.join(__dirname, '..', 'build', 'icon.icns')
+      : path.join(__dirname, '..', 'build', 'icon.ico'),
     frame: false,
     backgroundColor: '#ffffff',
     webPreferences: {
